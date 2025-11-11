@@ -2,12 +2,8 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from "@shared/schema";
 import dotenv from "dotenv";
-import path from "path";
 
-// 👇 Point dotenv to your actual .env file
-dotenv.config({
-  path: path.resolve("C:/Users/pro3/Downloads/PerceiveGrade/PerceiveGrade/.env"),
-});
+dotenv.config();
 
 // Export schema tables and types
 export {

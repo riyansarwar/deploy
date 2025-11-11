@@ -42,6 +42,7 @@ export default function QuizMonitorPage() {
     latestFrames,
     monitoringStudentId,
     stopMonitoring,
+    frameCounts,
   } = useWebcamMonitoring({
     quizId,
     isTeacher: true
@@ -82,6 +83,8 @@ export default function QuizMonitorPage() {
     const variant = status === "in_progress" ? "default" : status === "completed" ? "secondary" : "outline";
     return <Badge variant={variant}>{status || "unknown"}</Badge>;
   };
+
+  const viewerFrame = viewerStudentId ? latestFrames.get(viewerStudentId) : undefined;
 
   return (
     <div className="container mx-auto py-6">
@@ -145,7 +148,9 @@ export default function QuizMonitorPage() {
                   <TableCell>{a.endsAt ? format(new Date(a.endsAt), "PPP p") : "—"}</TableCell>
                   <TableCell>
                     {(() => {
-                      const sid = a.studentId || a.userId;
+                      const sidRaw = a.student?.id ?? a.studentId ?? a.userId;
+                      const sid = typeof sidRaw === "string" ? parseInt(sidRaw, 10) : Number(sidRaw ?? 0);
+                      if (!sid) return <span className="text-xs text-muted-foreground">—</span>;
                       const frame = latestFrames.get(sid);
                       if (frame?.dataUrl) {
                         return (
@@ -219,8 +224,8 @@ export default function QuizMonitorPage() {
           <DialogHeader>
             <DialogTitle>Live Webcam</DialogTitle>
           </DialogHeader>
-          {viewerStudentId && frames[viewerStudentId] ? (
-            <img src={frames[viewerStudentId]} alt="Live Webcam" className="w-full h-auto rounded border" />
+          {viewerFrame?.dataUrl ? (
+            <img src={viewerFrame.dataUrl} alt="Live Webcam" className="w-full h-auto rounded border" />
           ) : (
             <div className="text-sm text-muted-foreground">No live frame available.</div>
           )}

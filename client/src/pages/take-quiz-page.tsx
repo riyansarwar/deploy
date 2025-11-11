@@ -100,6 +100,7 @@ export default function TakeQuizPage() {
   const captureIntervalRef = useRef<number | null>(null);
   const consentPollingRef = useRef<number | null>(null);
   const [consentApproved, setConsentApproved] = useState(false);
+  const consentApprovedRef = useRef(false);
 
   // Form for answering questions
   const form = useForm<AnswerFormData>({
@@ -423,6 +424,9 @@ export default function TakeQuizPage() {
   };
 
 
+  useEffect(() => {
+    consentApprovedRef.current = consentApproved;
+  }, [consentApproved]);
 
   const startStreaming = async () => {
     if (streaming) return;
@@ -434,10 +438,12 @@ export default function TakeQuizPage() {
       });
       streamRef.current = stream;
       
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play().catch(() => {});
-      }
+      const videoElement = videoRef.current ?? document.createElement('video');
+      videoElement.muted = true;
+      videoElement.playsInline = true;
+      videoElement.srcObject = stream;
+      videoRef.current = videoElement;
+      await videoElement.play().catch(() => {});
 
       // Setup canvas for snapshot encoding
       const canvas = canvasRef.current ?? document.createElement('canvas');
@@ -450,10 +456,12 @@ export default function TakeQuizPage() {
 
       // Send frames via HTTP every 2 seconds (more reliable than WebSocket)
       captureIntervalRef.current = window.setInterval(async () => {
-        if (!ctx || !videoRef.current || !consentApproved) return;
+        const currentVideo = videoRef.current;
+        if (!ctx || !currentVideo || !consentApprovedRef.current) return;
+        if (currentVideo.readyState < 2) return;
         
         try {
-          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+          ctx.drawImage(currentVideo, 0, 0, canvas.width, canvas.height);
           const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
           
           // Send frame via HTTP API instead of WebSocket
@@ -543,6 +551,7 @@ export default function TakeQuizPage() {
       });
       
       setConsentApproved(approved);
+      consentApprovedRef.current = approved;
       setConsentModalOpen(false);
       setConsentRequestedBy(null);
       
