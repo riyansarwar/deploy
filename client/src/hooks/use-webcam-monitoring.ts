@@ -212,17 +212,20 @@ export function useWebcamMonitoring({
 
     // Server-Sent Events for real-time frame updates
     const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
-    const eventSource = new EventSource(`${protocol}//${window.location.host}/api/monitoring/stream?quizId=${quizId}&studentId=${monitoringStudentId}`);
+    const token = localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token') || '';
+    const eventSource = new EventSource(`${protocol}//${window.location.host}/api/monitoring/stream?quizId=${quizId}&studentId=${monitoringStudentId}&token=${encodeURIComponent(token)}`);
     eventSourceRef.current = eventSource;
 
     eventSource.onmessage = (event) => {
       try {
         const frame: MonitoringFrame = JSON.parse(event.data);
-        setLatestFrames(prev => {
-          const newMap = new Map(prev);
-          newMap.set(frame.studentId, frame);
-          return newMap;
-        });
+        if ((frame as any).dataUrl && (frame as any).studentId) {
+          setLatestFrames(prev => {
+            const newMap = new Map(prev);
+            newMap.set(frame.studentId, frame);
+            return newMap;
+          });
+        }
       } catch (error) {
         console.warn('Failed to parse frame data:', error);
       }
@@ -294,4 +297,299 @@ export function useWebcamMonitoring({
     requestWebcamAccess,
     stopMonitoring
   };
+}
+  
+
+   catch (error) {
+
+      console.error('Failed to send consent response:', error);
+
+    }
+
+  }, [quizId, studentId, requestingTeacherId, startStreaming, stopStreaming]);
+
+
+
+  // **TEACHER SIDE - Monitoring**
+
+  const requestWebcamAccess = useCallback(async (targetStudentId: number) => {
+
+    if (!isTeacher) return;
+
+    
+
+    try {
+
+      await apiRequest('POST', '/api/monitoring/request', {
+
+        quizId,
+
+        studentId: targetStudentId
+
+      });
+
+      
+
+      setMonitoringStudentId(targetStudentId);
+
+    } catch (error) {
+
+      console.error('Failed to request webcam access:', error);
+
+    }
+
+  }, [isTeacher, quizId]);
+
+
+
+  const stopMonitoring = useCallback(() => {
+
+    if (eventSourceRef.current) {
+
+      eventSourceRef.current.close();
+
+      eventSourceRef.current = null;
+
+    }
+
+    
+
+    setMonitoringStudentId(null);
+
+    setLatestFrames(new Map());
+
+  }, []);
+
+
+
+  // **STUDENT SIDE - Listen for consent requests**
+
+  useEffect(() => {
+
+    if (!enabled || isTeacher || !studentId) return;
+
+
+
+    const pollForConsentRequests = async () => {
+
+      try {
+
+        const response = await apiRequest('GET', `/api/monitoring/consent-requests?quizId=${quizId}&studentId=${studentId}`);
+
+        const data = await response.json();
+
+        
+
+        if (data.hasRequest && !consentRequested) {
+
+          setConsentRequested(true);
+
+          setRequestingTeacherId(data.teacherId);
+
+        }
+
+      } catch (error) {
+
+        console.warn('Failed to check consent requests:', error);
+
+      }
+
+    };
+
+
+
+    // Poll every 5 seconds for consent requests
+
+    const pollInterval = setInterval(pollForConsentRequests, 5000);
+
+    pollForConsentRequests(); // Initial check
+
+
+
+    return () => {
+
+      clearInterval(pollInterval);
+
+    };
+
+  }, [enabled, isTeacher, studentId, quizId, consentRequested]);
+
+
+
+  // **TEACHER SIDE - Monitor active sessions and frames**
+
+  useEffect(() => {
+
+    if (!enabled || !isTeacher || !monitoringStudentId) return;
+
+
+
+    // Server-Sent Events for real-time frame updates
+
+    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+
+    const eventSource = new EventSource(`${protocol}//${window.location.host}/api/monitoring/stream?quizId=${quizId}&studentId=${monitoringStudentId}`);
+
+    eventSourceRef.current = eventSource;
+
+
+
+    eventSource.onmessage = (event) => {
+
+      try {
+
+        const frame: MonitoringFrame = JSON.parse(event.data);
+
+        setLatestFrames(prev => {
+
+          const newMap = new Map(prev);
+
+          newMap.set(frame.studentId, frame);
+
+          return newMap;
+
+        });
+
+      } catch (error) {
+
+        console.warn('Failed to parse frame data:', error);
+
+      }
+
+    };
+
+
+
+    eventSource.onerror = () => {
+
+      console.warn('EventSource connection error, will retry automatically');
+
+    };
+
+
+
+    return () => {
+
+      eventSource.close();
+
+    };
+
+  }, [enabled, isTeacher, monitoringStudentId, quizId]);
+
+
+
+  // **TEACHER SIDE - Poll for active sessions**
+
+  useEffect(() => {
+
+    if (!enabled || !isTeacher) return;
+
+
+
+    const pollSessions = async () => {
+
+      try {
+
+        const response = await apiRequest('GET', `/api/monitoring/sessions?quizId=${quizId}`);
+
+        const sessions = await response.json();
+
+        setActiveSessions(sessions);
+
+      } catch (error) {
+
+        console.warn('Failed to fetch monitoring sessions:', error);
+
+      }
+
+    };
+
+
+
+    // Poll every 10 seconds
+
+    sessionPollingRef.current = window.setInterval(pollSessions, 10000);
+
+    pollSessions(); // Initial fetch
+
+
+
+    return () => {
+
+      if (sessionPollingRef.current) {
+
+        clearInterval(sessionPollingRef.current);
+
+      }
+
+    };
+
+  }, [enabled, isTeacher, quizId]);
+
+
+
+  // Cleanup on unmount
+
+  useEffect(() => {
+
+    return () => {
+
+      stopStreaming();
+
+      stopMonitoring();
+
+      
+
+      if (sessionPollingRef.current) {
+
+        clearInterval(sessionPollingRef.current);
+
+      }
+
+    };
+
+  }, [stopStreaming, stopMonitoring]);
+
+
+
+  return {
+
+    // Student states and actions
+
+    streaming,
+
+    framesSent,
+
+    consentRequested,
+
+    consentApproved,
+
+    requestingTeacherId,
+
+    startStreaming,
+
+    stopStreaming,
+
+    respondToConsent,
+
+    videoRef,
+
+    canvasRef,
+
+
+
+    // Teacher states and actions  
+
+    activeSessions,
+
+    latestFrames,
+
+    monitoringStudentId,
+
+    requestWebcamAccess,
+
+    stopMonitoring
+
+  };
+
 }

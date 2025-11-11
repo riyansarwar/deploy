@@ -38,21 +38,22 @@ export default function QuizMonitorPage() {
 
   // Use the new HTTP-based webcam monitoring system
   const {
-    requestAccess,
-    frames,
-    frameCount,
-    isConnected,
-    consents,
-    isLoading: monitoringLoading,
-    error: monitoringError
+    requestWebcamAccess,
+    latestFrames,
+    monitoringStudentId,
+    stopMonitoring,
   } = useWebcamMonitoring({
     quizId,
-    role: 'teacher'
+    isTeacher: true
   });
+
+  const isConnected = !!monitoringStudentId;
+  const monitoringLoading = false;
+  const monitoringError = undefined as any;
 
   const handleRequestWebcam = async (studentId: number) => {
     try {
-      await requestAccess(studentId);
+      await requestWebcamAccess(studentId);
       toast({
         title: "Webcam Request Sent",
         description: `Request sent to student #${studentId}`,
@@ -143,18 +144,24 @@ export default function QuizMonitorPage() {
                   <TableCell>{a.startedAt ? format(new Date(a.startedAt), "PPP p") : "—"}</TableCell>
                   <TableCell>{a.endsAt ? format(new Date(a.endsAt), "PPP p") : "—"}</TableCell>
                   <TableCell>
-                    {frames[a.studentId || a.userId] ? (
-                      <button onClick={() => { setViewerStudentId(a.studentId || a.userId); setViewerOpen(true); }}>
-                        <img src={frames[a.studentId || a.userId]} alt="Webcam" className="w-24 h-16 object-cover rounded border hover:ring-2 hover:ring-primary transition" />
-                      </button>
-                    ) : consents[a.studentId || a.userId] ? (
-                      <span className="text-xs text-muted-foreground">Waiting for frames…</span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
+                    {(() => {
+                      const sid = a.studentId || a.userId;
+                      const frame = latestFrames.get(sid);
+                      if (frame?.dataUrl) {
+                        return (
+                          <button onClick={() => { setViewerStudentId(sid); setViewerOpen(true); }}>
+                            <img src={frame.dataUrl} alt="Webcam" className="w-24 h-16 object-cover rounded border hover:ring-2 hover:ring-primary transition" />
+                          </button>
+                        );
+                      }
+                      if (monitoringStudentId === sid) {
+                        return <span className="text-xs text-muted-foreground">Waiting for frames…</span>;
+                      }
+                      return <span className="text-xs text-muted-foreground">—</span>;
+                    })()}
                   </TableCell>
                   <TableCell className="text-right">
-                    <span className="text-xs text-muted-foreground">{frameCount[a.studentId || a.userId] || 0}</span>
+                    <span className="text-xs text-muted-foreground">0</span>
                   </TableCell>
                   <TableCell className="space-x-2">
                     <Button size="sm" variant="outline" onClick={() => { setSelectedAttempt(a); setEventsOpen(true); }}>View Events</Button>
@@ -162,8 +169,8 @@ export default function QuizMonitorPage() {
                       <Button
                         size="sm"
                         onClick={() => handleRequestWebcam((a.student?.id ?? a.studentId ?? a.userId) as number)}
-                        disabled={monitoringLoading || !isConnected}
-                        title={!isConnected ? 'Monitoring not connected' : ''}
+                        disabled={monitoringLoading}
+                        title={''}
                       >
                         Request Webcam
                       </Button>

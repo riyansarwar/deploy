@@ -2080,6 +2080,16 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
   });
 
   // **MONITORING API ENDPOINTS - HTTP-based webcam monitoring**
+  // Allow SSE clients (which cannot set Authorization header) to pass token via query string
+  app.use('/api/monitoring', (req: any, _res: Response, next: NextFunction) => {
+    try {
+      if (!req.headers?.authorization && req.query?.token) {
+        req.headers.authorization = `Bearer ${req.query.token}`;
+      }
+    } catch {}
+    next();
+  });
+  app.use("/api/monitoring", authenticateToken);
   
   // In-memory storage for monitoring data (consider moving to database for production)
   const monitoringSessions = new Map<string, { studentId: number; quizId: number; status: string; lastFrame: number; teacherId?: number }>();

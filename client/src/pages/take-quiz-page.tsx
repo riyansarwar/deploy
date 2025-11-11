@@ -77,6 +77,8 @@ export default function TakeQuizPage() {
   // Answer states
   const [answers, setAnswers] = useState<{[key: number]: string}>({});
   const [codeAnswers, setCodeAnswers] = useState<{[key: number]: string}>({});
+  const [codeOutputs, setCodeOutputs] = useState<{[key: number]: string}>({});
+  const [codeErrors, setCodeErrors] = useState<{[key: number]: string}>({});
   const [showCodeEditor, setShowCodeEditor] = useState<{[key: number]: boolean}>({});
   
   // UI states
