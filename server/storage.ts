@@ -608,11 +608,6 @@ export class Storage {
       .where(eq(studentQuizzes.quizId, quizId));
   }
 
-  // Quiz-related methods
-  async getQuizzesByTeacher(teacherId: number): Promise<Quiz[]> {
-    return await db.select().from(quizzes).where(eq(quizzes.teacherId, teacherId)).orderBy(desc(quizzes.createdAt));
-  }
-
   async updateClass(id: number, classData: Partial<InsertClass>): Promise<Class> {
     const [updatedClass] = await db
       .update(classes)
