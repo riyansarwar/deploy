@@ -6,12 +6,10 @@ import Sidebar from "@/components/ui/shared/sidebar";
 import StatsCard from "@/components/dashboard/stats-card";
 import UpcomingQuizzes from "@/components/dashboard/upcoming-quizzes";
 import RecentActivity from "@/components/dashboard/recent-activity";
-import PerformanceOverview from "@/components/dashboard/performance-overview";
 import { 
   User, 
   FileText, 
-  HelpCircle, 
-  BarChart
+  HelpCircle
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -20,23 +18,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const isTeacher = user?.role === "teacher";
   
-  interface AnalyticsData {
-    teacherId: number;
-    classCount: number;
-    studentCount: number;
-    questionCount: number;
-    quizCount: number;
-    averageScore: number;
-    subjectPerformance?: Array<{
-      subject: string;
-      score: number;
-    }>;
-  }
-  
-  const { data: analyticsData, isLoading: analyticsLoading } = useQuery<AnalyticsData>({
-    queryKey: ["/api/analytics/performance"],
-    enabled: !!user
-  });
+
 
   const { data: questions, isLoading: questionsLoading } = useQuery<any[]>({
     queryKey: ["/api/questions"],
@@ -121,19 +103,6 @@ export default function DashboardPage() {
                       linkTo="/question-bank"
                     />
                   )}
-                  
-                  {analyticsLoading ? (
-                    <Skeleton className="h-32 w-full" />
-                  ) : (
-                    <StatsCard 
-                      title="Avg. Score"
-                      value={analyticsData?.averageScore ? `${Math.round(analyticsData.averageScore)}%` : "N/A"}
-                      icon={<BarChart className="h-6 w-6" />}
-                      iconBgColor="bg-yellow-100"
-                      iconColor="text-yellow-600"
-                      linkTo="/analytics"
-                    />
-                  )}
                 </>
               ) : (
                 /* Student Stats */
@@ -164,19 +133,6 @@ export default function DashboardPage() {
                     />
                   )}
                   
-                  {analyticsLoading ? (
-                    <Skeleton className="h-32 w-full" />
-                  ) : (
-                    <StatsCard 
-                      title="My Average Score"
-                      value={analyticsData?.averageScore ? `${Math.round(analyticsData.averageScore)}%` : "N/A"}
-                      icon={<BarChart className="h-6 w-6" />}
-                      iconBgColor="bg-yellow-100"
-                      iconColor="text-yellow-600"
-                      linkTo="/analytics"
-                    />
-                  )}
-                  
                   {quizzesLoading ? (
                     <Skeleton className="h-32 w-full" />
                   ) : (
@@ -197,11 +153,6 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               <UpcomingQuizzes />
               <RecentActivity />
-            </div>
-            
-            {/* Performance Overview */}
-            <div className="mb-6">
-              <PerformanceOverview />
             </div>
           </div>
         </main>

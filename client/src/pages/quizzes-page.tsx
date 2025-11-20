@@ -1318,18 +1318,31 @@ export default function QuizzesPage() {
                                   
                                   {quiz.status === "completed" && (
                                     <>
-                                      <Button
-                                        variant="ghost"
-                                        onClick={() => setLocation(`/quizzes/${quiz.id}/grade`)}
-                                        className="text-blue-600 hover:text-blue-700"
-                                      >
-                                        <FileText className="h-4 w-4 mr-1" />
-                                        Grade
-                                      </Button>
-                                      <Button variant="ghost" onClick={() => setLocation(`/quizzes/${quiz.id}/monitor`)}>
-                                        <BarChart className="h-4 w-4 mr-1" />
-                                        Monitor
-                                      </Button>
+                                      {quiz.resultsPosted ? (
+                                        <Button
+                                          variant="ghost"
+                                          onClick={() => setLocation(`/quizzes/${quiz.id}/results-summary`)}
+                                          className="text-green-600 hover:text-green-700"
+                                        >
+                                          <CheckCircle className="h-4 w-4 mr-1" />
+                                          View Results
+                                        </Button>
+                                      ) : (
+                                        <>
+                                          <Button
+                                            variant="ghost"
+                                            onClick={() => setLocation(`/quizzes/${quiz.id}/grade`)}
+                                            className="text-blue-600 hover:text-blue-700"
+                                          >
+                                            <FileText className="h-4 w-4 mr-1" />
+                                            Grade
+                                          </Button>
+                                          <Button variant="ghost" onClick={() => setLocation(`/quizzes/${quiz.id}/monitor`)}>
+                                            <BarChart className="h-4 w-4 mr-1" />
+                                            Monitor
+                                          </Button>
+                                        </>
+                                      )}
                                     </>
                                   )}
                                 </>
@@ -1362,7 +1375,7 @@ export default function QuizzesPage() {
                                   {quiz.studentStatus === "completed" && (
                                     <Button 
                                       variant="ghost"
-                                      onClick={() => setLocation(`/quizzes/${quiz.quizId}/take`)}
+                                      onClick={() => setLocation(`/quizzes/${quiz.studentQuizId}/results`)}
                                     >
                                       View Results
                                     </Button>

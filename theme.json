@@ -1,5 +1,6 @@
 {
   "name": "Cyan",
+  "primary": "187 100% 42%",
   "cssVars": {
     "light": {
       "background": "0 0% 100%",

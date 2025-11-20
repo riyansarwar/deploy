@@ -42,8 +42,8 @@ import { z } from "zod";
 var users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
+  email: text("email").notNull(),
   password: text("password").notNull(),
-  email: text("email").notNull().unique(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   role: text("role").notNull().default("student"),
@@ -189,10 +189,7 @@ var insertNotificationSchema = createInsertSchema(notifications).omit({ id: true
 
 // server/db.ts
 import dotenv from "dotenv";
-import path from "path";
-dotenv.config({
-  path: path.resolve("C:/Users/pro3/Downloads/PerceiveGrade/PerceiveGrade/.env")
-});
+dotenv.config();
 var databaseUrl = process.env.DATABASE_URL || process.env.SUPABASE_DATABASE_URL;
 if (!databaseUrl) {
   throw new Error("DATABASE_URL must be set. Please add your database connection string.");
@@ -211,15 +208,6 @@ var Storage = class {
     } catch (error) {
       console.error("Error creating user:", error);
       throw error;
-    }
-  }
-  async getUserByEmail(email) {
-    try {
-      const [user] = await db.select().from(users).where(eq(users.email, email));
-      return user;
-    } catch (error) {
-      console.error("Error getting user by email:", error);
-      return void 0;
     }
   }
   async getUserById(id) {
@@ -243,6 +231,15 @@ var Storage = class {
       return void 0;
     }
   }
+  async getUserByEmail(email) {
+    try {
+      const [user] = await db.select().from(users).where(eq(users.email, email));
+      return user;
+    } catch (error) {
+      console.error("Error getting user by email:", error);
+      return void 0;
+    }
+  }
   async getUsersByRole(role) {
     try {
       return await db.select().from(users).where(eq(users.role, role));
@@ -251,12 +248,11 @@ var Storage = class {
       return [];
     }
   }
-  // Update basic profile fields (firstName, lastName, email)
+  // Update basic profile fields (firstName, lastName)
   async updateUserProfile(id, updates) {
     const updateData = {};
     if (typeof updates.firstName === "string") updateData.firstName = updates.firstName;
     if (typeof updates.lastName === "string") updateData.lastName = updates.lastName;
-    if (typeof updates.email === "string") updateData.email = updates.email;
     const [updated] = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
     return updated;
   }
@@ -388,7 +384,6 @@ var Storage = class {
       studentId: users.id,
       studentName: users.firstName,
       studentLastName: users.lastName,
-      studentEmail: users.email,
       quizId: quizzes.id,
       quizTitle: quizzes.title,
       score: studentQuizzes.score,
@@ -404,7 +399,6 @@ var Storage = class {
         performanceMap.set(key, {
           studentId: row.studentId,
           studentName: `${row.studentName} ${row.studentLastName}`,
-          studentEmail: row.studentEmail,
           scores: [],
           quizzesCompleted: 0
         });
@@ -415,7 +409,7 @@ var Storage = class {
         student.quizzesCompleted++;
       }
     });
-    return Array.from(performanceMap.values()).map((student) => ({
+    return Array.from(performanceMap.values()).filter((student) => student.quizzesCompleted > 0).map((student) => ({
       ...student,
       averageScore: student.scores.length > 0 ? student.scores.reduce((a, b) => a + b, 0) / student.scores.length : null
     }));
@@ -464,9 +458,10 @@ var Storage = class {
     }).from(studentQuizzes).innerJoin(users, eq(studentQuizzes.studentId, users.id)).where(eq(studentQuizzes.quizId, quizId));
     return result.map((r) => ({ ...r.attempt, student: {
       id: r.student.id,
+      name: `${r.student.firstName} ${r.student.lastName}`,
+      email: r.student.email,
       firstName: r.student.firstName,
-      lastName: r.student.lastName,
-      email: r.student.email
+      lastName: r.student.lastName
     } }));
   }
   async submitStudentAnswer(data) {
@@ -488,12 +483,26 @@ var Storage = class {
     return row;
   }
   // Grading functions
-  async updateStudentAnswerScore(studentQuizId, questionId, score, feedback) {
-    const [row] = await db.update(studentAnswers).set({ score, feedback }).where(and(
+  async updateStudentAnswerScore(studentQuizId, questionId, score, feedback, aiAnalysis) {
+    const [updatedRow] = await db.update(studentAnswers).set({ score, feedback, aiAnalysis }).where(and(
       eq(studentAnswers.studentQuizId, studentQuizId),
       eq(studentAnswers.questionId, questionId)
     )).returning();
-    return row;
+    if (updatedRow) {
+      return updatedRow;
+    }
+    const [insertedRow] = await db.insert(studentAnswers).values({
+      studentQuizId,
+      questionId,
+      answer: "",
+      codeAnswer: "",
+      codeOutput: "",
+      codeError: "",
+      score,
+      feedback: feedback || null,
+      aiAnalysis
+    }).returning();
+    return insertedRow;
   }
   async getStudentAnswer(studentQuizId, questionId) {
     const [row] = await db.select().from(studentAnswers).where(and(
@@ -551,7 +560,15 @@ var Storage = class {
     return newNotification;
   }
   async markNotificationAsRead(notificationId) {
-    await db.update(notifications).set({ read: true }).where(eq(notifications.id, notificationId));
+    const [updatedNotification] = await db.update(notifications).set({ read: true }).where(eq(notifications.id, notificationId)).returning();
+    return updatedNotification;
+  }
+  async deleteNotification(notificationId) {
+    const result = await db.delete(notifications).where(eq(notifications.id, notificationId)).returning({ id: notifications.id });
+    return result.length > 0;
+  }
+  async setGlobalQuizEndsAt(quizId, endsAt) {
+    await db.update(studentQuizzes).set({ endsAt }).where(eq(studentQuizzes.quizId, quizId));
   }
   // Quiz-related methods
   async getQuizzesByTeacher(teacherId) {
@@ -712,7 +729,7 @@ async function initializeSampleData() {
     const sampleUsers = [
       {
         username: "teacher1",
-        email: "teacher@example.com",
+        email: "teacher1@example.com",
         password: "password",
         firstName: "John",
         lastName: "Smith",
@@ -826,25 +843,21 @@ function setupAuth(app2) {
   app2.post("/api/register", async (req, res) => {
     try {
       const { email, password, firstName, lastName, role, username } = req.body;
-      const existingUser = await storage.getUserByEmail(email);
-      if (existingUser) {
-        return res.status(400).json({ message: "User already exists with this email" });
-      }
       const existingUsername = await storage.getUserByUsername(username);
       if (existingUsername) {
         return res.status(400).json({ message: "Username already taken" });
       }
       const hashedPassword = await bcrypt.hash(password, 10);
       const newUser = await storage.createUser({
-        email,
         username,
+        email,
         password: hashedPassword,
         firstName,
         lastName,
         role
       });
       const token = jwt.sign(
-        { id: newUser.id, email: newUser.email, role: newUser.role },
+        { id: newUser.id, username: newUser.username, role: newUser.role },
         JWT_SECRET,
         { expiresIn: "7d" }
       );
@@ -876,7 +889,7 @@ function setupAuth(app2) {
         });
       }
       const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role },
+        { id: user.id, username: user.username, role: user.role },
         JWT_SECRET,
         { expiresIn: "7d" }
       );
@@ -908,380 +921,203 @@ function setupAuth(app2) {
 // server/routes.ts
 import { fromZodError } from "zod-validation-error";
 
-// server/openai.ts
-import OpenAI from "openai";
-var openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "your-api-key" });
-function getSubjectSpecificGradingCriteria(subject) {
-  const normalizedSubject = subject.toLowerCase().trim();
-  if (normalizedSubject.includes("data struct") || normalizedSubject.includes("algorithm")) {
-    return `
-      For Data Structures and Algorithms questions, evaluate based on:
-      
-      1. Correctness (0-10):
-         - Algorithm correctness: Does the solution produce correct results?
-         - Edge case handling: Does it handle boundary conditions and special cases?
-         - Time complexity: Is the time complexity appropriate for the problem?
-         - Space complexity: Is the space complexity optimized?
-      
-      2. Completeness (0-10):
-         - Problem understanding: Does the solution address all requirements?
-         - Analysis thoroughness: Is the complexity analysis complete and accurate?
-         - Implementation details: Are all necessary steps implemented?
-         - Testing considerations: Are potential test cases addressed?
-      
-      3. Relevance (0-10):
-         - Algorithm selection: Is the most appropriate algorithm chosen?
-         - Data structure selection: Is the most efficient data structure used?
-         - Optimization techniques: Are appropriate optimizations applied?
-         - Code readability: Is the solution well-structured and documented?
-      
-      Key concepts to check for understanding:
-      - Time and space complexity analysis (Big O notation)
-      - Array and linked data structures (arrays, linked lists, stacks, queues)
-      - Tree and graph algorithms (traversal, shortest path, etc.)
-      - Searching and sorting techniques
-      - Dynamic programming
-      - Greedy algorithms
-      - Divide and conquer approaches
-      - Hashing and indexing
-      
-      Common misconceptions to identify:
-      - Incorrect complexity analysis
-      - Inefficient algorithm selection
-      - Confusion between similar data structures
-      - Overlooking edge cases
-      - Unnecessary complexity in solutions
-    `;
-  } else if (normalizedSubject.includes("database") || normalizedSubject.includes("sql")) {
-    return `
-      For Database Systems and SQL questions, evaluate based on:
-      
-      1. Correctness (0-10):
-         - Query correctness: Does the SQL query return the expected results?
-         - Syntax accuracy: Is the SQL syntax valid?
-         - Schema design: Is the database schema properly designed?
-         - Normalization: Are normalization principles correctly applied?
-      
-      2. Completeness (0-10):
-         - Query coverage: Does the solution address all requirements?
-         - Constraint handling: Are all necessary constraints defined?
-         - Transaction management: Is transaction behavior considered?
-         - Security considerations: Are access controls properly implemented?
-      
-      3. Relevance (0-10):
-         - Query optimization: Is the SQL query optimized for performance?
-         - Index usage: Are appropriate indexes defined or utilized?
-         - Join techniques: Are the most efficient join methods used?
-         - Advanced features: Is appropriate use made of views, stored procedures, etc.?
-      
-      Key concepts to check for understanding:
-      - Relational database design
-      - SQL query construction (SELECT, JOIN, GROUP BY, etc.)
-      - Indexing and query optimization
-      - Normalization forms (1NF, 2NF, 3NF, BCNF)
-      - Transaction properties (ACID)
-      - Entity-relationship modeling
-      - Database security principles
-      - NoSQL concepts where applicable
-      
-      Common misconceptions to identify:
-      - Inefficient query patterns (e.g., SELECT * when unnecessary)
-      - Denormalization without purpose
-      - Missing join conditions
-      - Improper use of aggregation functions
-      - Lack of transaction boundaries
-    `;
-  } else if (normalizedSubject.includes("web") || normalizedSubject.includes("javascript") || normalizedSubject.includes("frontend")) {
-    return `
-      For Web Development questions, evaluate based on:
-      
-      1. Correctness (0-10):
-         - Functionality: Does the solution work as expected?
-         - Standards compliance: Does it follow web standards (HTML5, CSS3, ES6+)?
-         - Framework usage: Are framework patterns correctly implemented?
-         - Responsiveness: Does it handle different screen sizes?
-      
-      2. Completeness (0-10):
-         - Feature implementation: Are all required features implemented?
-         - Cross-browser compatibility: Will it work across browsers?
-         - Error handling: Are network and user errors handled gracefully?
-         - Performance considerations: Is loading and interaction optimized?
-      
-      3. Relevance (0-10):
-         - Best practices: Does the code follow modern web development practices?
-         - Component design: Are components modular and reusable?
-         - State management: Is application state handled appropriately?
-         - Security awareness: Are common vulnerabilities addressed?
-      
-      Key concepts to check for understanding:
-      - DOM manipulation
-      - Asynchronous programming (Promises, async/await)
-      - Component-based architecture
-      - State management patterns
-      - API integration
-      - Client-side routing
-      - Responsive design principles
-      - Web security fundamentals
-      
-      Common misconceptions to identify:
-      - Callback hell without proper async handling
-      - Direct DOM manipulation in component frameworks
-      - Inefficient rendering patterns
-      - Security vulnerabilities (XSS, CSRF)
-      - Poor state management practices
-    `;
-  } else if (normalizedSubject.includes("machine learning") || normalizedSubject.includes("artificial intelligence") || normalizedSubject.includes("data science")) {
-    return `
-      For Machine Learning and AI questions, evaluate based on:
-      
-      1. Correctness (0-10):
-         - Mathematical accuracy: Are the mathematical foundations correct?
-         - Algorithm implementation: Is the ML algorithm properly implemented?
-         - Model evaluation: Are evaluation metrics appropriately selected and calculated?
-         - Data handling: Is data preprocessing correctly handled?
-      
-      2. Completeness (0-10):
-         - Problem framing: Is the problem correctly framed as an ML task?
-         - Feature engineering: Are appropriate features selected/created?
-         - Model selection: Is the most suitable model chosen for the problem?
-         - Validation approach: Is cross-validation or appropriate testing used?
-      
-      3. Relevance (0-10):
-         - Model tuning: Are hyperparameters appropriately selected?
-         - Overfitting prevention: Are regularization techniques applied when needed?
-         - Interpretability: Is model interpretation considered?
-         - Deployment considerations: Are production concerns addressed?
-      
-      Key concepts to check for understanding:
-      - Supervised vs. unsupervised learning
-      - Classification vs. regression
-      - Model evaluation metrics
-      - Feature selection and engineering
-      - Cross-validation techniques
-      - Bias-variance tradeoff
-      - Regularization methods
-      - Neural network fundamentals
-      
-      Common misconceptions to identify:
-      - Training/test data leakage
-      - Inappropriate evaluation metrics
-      - Ignoring feature scaling
-      - Overfitting without recognition
-      - Misinterpreting model outputs
-    `;
-  } else if (normalizedSubject.includes("operating system") || normalizedSubject.includes("os")) {
-    return `
-      For Operating Systems questions, evaluate based on:
-      
-      1. Correctness (0-10):
-         - Conceptual accuracy: Are OS concepts correctly explained?
-         - Implementation details: Are implementation mechanisms accurately described?
-         - Process management: Are process/thread concepts properly understood?
-         - Memory management: Are memory allocation strategies correctly applied?
-      
-      2. Completeness (0-10):
-         - Coverage of key components: Are all relevant OS components addressed?
-         - Synchronization handling: Are race conditions and deadlocks considered?
-         - Resource management: Are CPU, memory, and I/O resources properly managed?
-         - Security considerations: Are protection mechanisms addressed?
-      
-      3. Relevance (0-10):
-         - Design principles: Are OS design principles correctly applied?
-         - Algorithm selection: Are appropriate scheduling/paging algorithms chosen?
-         - System calls: Is the interaction between user and kernel space properly handled?
-         - Performance considerations: Are efficiency tradeoffs recognized?
-      
-      Key concepts to check for understanding:
-      - Process/thread management
-      - CPU scheduling algorithms
-      - Memory management (paging, segmentation)
-      - Virtual memory
-      - File systems
-      - I/O systems
-      - Synchronization mechanisms
-      - Deadlock prevention and handling
-      
-      Common misconceptions to identify:
-      - Confusion between processes and threads
-      - Misunderstanding of virtual memory
-      - Incorrect synchronization primitives
-      - Overlooking context switching costs
-      - File system implementation errors
-    `;
-  } else {
-    return `
-      For Object-Oriented Programming with C++ questions, evaluate based on:
-      
-      1. Correctness (0-10):
-         - Syntax accuracy: Is the C++ code syntactically correct?
-         - Logic validity: Does the solution work as intended?
-         - OOP principles: Are the appropriate OOP concepts correctly applied?
-         - Memory management: Is memory properly allocated and deallocated?
-      
-      2. Completeness (0-10):
-         - Implementation thoroughness: Are all requirements addressed?
-         - Edge case handling: Are boundary conditions considered?
-         - Error handling: Is there proper exception handling?
-         - Documentation: Are classes, methods, and logic sufficiently documented?
-      
-      3. Relevance (0-10):
-         - Solution approach: Is the most appropriate OOP approach used?
-         - Efficiency: Is the implementation efficient in terms of time and space complexity?
-         - Style and standards: Does the code follow C++ best practices?
-         - Design patterns: Are appropriate design patterns utilized when beneficial?
-      
-      Key concepts to check for understanding:
-      - Classes, objects, and instances
-      - Encapsulation and information hiding
-      - Inheritance and code reuse
-      - Polymorphism (compile-time and runtime)
-      - Abstract classes and interfaces
-      - Virtual functions and method overriding
-      - Constructors, destructors, and memory management
-      - Operator overloading
-      - Templates and generic programming
-      - Exception handling
-      - STL usage and understanding
-      
-      Common misconceptions to identify:
-      - Confusion between inheritance and composition
-      - Misunderstanding of virtual functions and polymorphism
-      - Improper memory management leading to leaks
-      - Incorrect overriding vs. overloading
-      - Inefficient use of STL containers
-      - Poor encapsulation practices
-    `;
-  }
+// server/gemini.ts
+import axios from "axios";
+var GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models";
+var DEFAULT_SUBJECT = "Object-Oriented Programming with C++";
+var GEMINI_BASE_PROMPT = `You are an AI grader for C++ programming assessments. Grade each question individually fairly and educationally.
+
+For each question, check if the answer is empty or just whitespace:
+- If EMPTY: Return grade "F"
+
+For non-empty answers, evaluate based on correctness and understanding:
+- A: Completely correct with good explanation (90-100%)
+- B: Mostly correct with adequate explanation (80-89%)
+- C: Basically correct but missing details (70-79%)
+- D: Partially correct but has errors or is unclear (60-69%)
+- F: Mostly incorrect or shows no understanding (0-59%)
+
+Be generous with grading - reward effort and partial understanding. Technical questions should focus on conceptual accuracy over perfect wording.
+
+Respond with deterministic JSON that exactly matches this shape:
+{
+  "submissionId": "<repeat the submission id provided>",
+  "questionGrades": [
+    {
+      "questionId": <number>,
+      "letterGrade": "<A|B|C|D|F>",
+      "feedback": "<brief constructive feedback>"
+    }
+  ],
+  "model": "gemini-2.0-flash-001"
 }
-async function gradeStudentAnswer(question, correctAnswer, studentAnswer, subject = "Object-Oriented Programming with C++") {
-  try {
-    const gradingCriteria = getSubjectSpecificGradingCriteria(subject);
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert educational assessment AI for university-level ${subject || "Object-Oriented Programming with C++"}. 
-          You'll be grading a student's answer to a question with the following specific criteria:
-          
-          ${gradingCriteria}
-          
-          Provide a score from 0-100, detailed feedback, and analysis in JSON format.`
-        },
+
+Grade each question individually. The questionGrades array must contain one entry for each question in the submission. Do not include scores or additional fields beyond what's specified.`;
+var GeminiClient = class {
+  apiKey;
+  model;
+  timeoutMs;
+  constructor({ apiKey, model, timeoutMs = 3e4 }) {
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY is not set");
+    }
+    this.apiKey = apiKey;
+    this.model = model ?? "gemini-2.5-pro";
+    this.timeoutMs = timeoutMs;
+  }
+  async grade(request) {
+    const payload = this.buildPayload(request);
+    const url = `${GEMINI_API_URL}/${encodeURIComponent(this.model)}:generateContent?key=${this.apiKey}`;
+    try {
+      const start = Date.now();
+      const response = await axios.post(url, payload, {
+        timeout: this.timeoutMs,
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+      const latencyMs = Date.now() - start;
+      return this.transformResponse(request, response.data, latencyMs);
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
+  }
+  buildPayload(request) {
+    const submissionBlock = this.formatSubmission(request);
+    return {
+      contents: [
         {
           role: "user",
-          content: `
-          QUESTION: ${question}
-          CORRECT ANSWER: ${correctAnswer}
-          STUDENT ANSWER: ${studentAnswer}
-          
-          Analyze the student's answer and provide a JSON response with:
-          1. "score": A score from 0-100
-          2. "feedback": Constructive feedback explaining the score with specific suggestions for improvement
-          3. "analysis": Detailed analysis containing:
-             - "correctness": Technical accuracy score (0-10)
-             - "completeness": Concept coverage score (0-10)
-             - "relevance": Focus on question score (0-10)
-             - "keypoints": Array of key points correctly covered
-             - "missingConcepts": Array of important concepts that were missed or underdeveloped
-             - "misconceptions": Array of any detected misconceptions or errors
-          `
+          parts: [
+            {
+              text: GEMINI_BASE_PROMPT
+            },
+            {
+              text: submissionBlock
+            }
+          ]
         }
       ],
-      response_format: { type: "json_object" },
-      temperature: 0.5,
-      // Lower temperature for more consistent grading
-      max_tokens: 1e3
-    });
-    const contentStr = response.choices[0].message.content || "{}";
-    const result = JSON.parse(contentStr);
-    return {
-      score: Math.round(result.score),
-      feedback: result.feedback,
-      analysis: {
-        correctness: result.analysis.correctness,
-        completeness: result.analysis.completeness,
-        relevance: result.analysis.relevance,
-        keypoints: result.analysis.keypoints || [],
-        missingConcepts: result.analysis.missingConcepts || [],
-        misconceptions: result.analysis.misconceptions || []
-      }
-    };
-  } catch (error) {
-    console.error("Error in AI grading:", error);
-    return {
-      score: 0,
-      feedback: "Error processing your answer. Please try again later.",
-      analysis: {
-        correctness: 0,
-        completeness: 0,
-        relevance: 0,
-        keypoints: [],
-        missingConcepts: ["Could not analyze due to technical error"],
-        misconceptions: []
+      generationConfig: {
+        temperature: 0,
+        topP: 0.8
       }
     };
   }
-}
-async function generatePerformanceInsights(studentData, subject = "Object-Oriented Programming with C++") {
-  try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert C++ programming instructor and educational analyst specializing in OOP. 
-          Analyze student performance data on C++ programming assignments and provide detailed, actionable insights
-          focused on improving their object-oriented programming skills.`
-        },
-        {
-          role: "user",
-          content: `
-          Analyze the following student performance data for Object-Oriented Programming with C++:
-          ${JSON.stringify(studentData)}
-          
-          Provide insights in JSON format with these specific C++ OOP-focused categories:
-          1. "learningGaps": Array of specific C++ OOP concepts the student is struggling with
-          2. "strengths": Array of C++ OOP concepts the student demonstrates mastery of
-          3. "recommendedFocus": Array of specific C++ OOP topics and exercises to practice
-          4. "teachingStrategies": Array of effective teaching approaches for addressing the identified gaps
-          
-          For each category, focus on:
-          - Specific C++ language features (classes, templates, virtual functions, etc.)
-          - Code organization principles (encapsulation, modularity)
-          - Memory management patterns (RAII, smart pointers)
-          - Design pattern understanding
-          - Abstraction and inheritance implementation
-          - Problem-solving approaches in an OOP context
-          `
-        }
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.6,
-      // Lower temperature for more consistent analysis
-      max_tokens: 1500
-    });
-    const contentStr = response.choices[0].message.content || "{}";
-    const result = JSON.parse(contentStr);
+  formatSubmission(request) {
+    const subject = request.subject ?? DEFAULT_SUBJECT;
+    const headerLines = [
+      `SUBMISSION_ID: ${request.submissionId}`,
+      `QUIZ_TYPE: ${request.quizType}`,
+      `SUBJECT: ${subject}`,
+      `STUDENT_ID: ${request.studentId}`
+    ];
+    if (request.quizId) {
+      headerLines.push(`QUIZ_ID: ${request.quizId}`);
+    }
+    if (request.practiceQuizId) {
+      headerLines.push(`PRACTICE_QUIZ_ID: ${request.practiceQuizId}`);
+    }
+    const questionBlocks = request.questions.map((question) => {
+      return [
+        `QUESTION_ID: ${question.questionId}`,
+        `PROMPT:
+${question.prompt}`,
+        `CORRECT_ANSWER:
+${question.correctAnswer}`,
+        `STUDENT_ANSWER:
+${question.studentAnswer}`
+      ].join("\n\n");
+    }).join("\n\n---\n\n");
+    const metadataBlock = request.metadata ? `
+
+METADATA (JSON):
+${JSON.stringify(request.metadata, null, 2)}` : "";
+    return [headerLines.join("\n"), "\nQUESTIONS:\n", questionBlocks, metadataBlock].join("");
+  }
+  transformResponse(request, data, latencyMs) {
+    let parsedData = {};
+    try {
+      const text2 = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text2) {
+        const cleanText = text2.replace(/```json\n?|\n?```/g, "").trim();
+        parsedData = JSON.parse(cleanText);
+      }
+    } catch (error) {
+      console.error("Failed to parse Gemini response JSON:", error);
+      console.error("Raw response:", data);
+    }
+    const questionGrades = this.normalizeQuestionGrades(parsedData?.questionGrades, request.questions);
     return {
-      learningGaps: result.learningGaps || [],
-      strengths: result.strengths || [],
-      recommendedFocus: result.recommendedFocus || [],
-      teachingStrategies: result.teachingStrategies || []
-    };
-  } catch (error) {
-    console.error("Error generating performance insights:", error);
-    return {
-      learningGaps: ["Unable to analyze learning gaps due to technical error"],
-      strengths: ["Unable to analyze strengths due to technical error"],
-      recommendedFocus: ["Review core concepts and fundamentals"],
-      teachingStrategies: ["Consider standard teaching approaches until analysis is available"]
+      submissionId: typeof parsedData?.submissionId === "string" ? parsedData.submissionId : request.submissionId,
+      questionGrades,
+      model: typeof parsedData?.model === "string" ? parsedData.model : this.model,
+      latencyMs,
+      rawResponse: data
     };
   }
+  normalizeQuestionGrades(questionGrades, requestQuestions) {
+    if (!Array.isArray(questionGrades)) {
+      return requestQuestions.map((q) => ({
+        questionId: q.questionId,
+        letterGrade: "F",
+        feedback: "Grading failed - please contact instructor"
+      }));
+    }
+    return requestQuestions.map((requestQuestion) => {
+      const grade = questionGrades.find((g) => g?.questionId === requestQuestion.questionId);
+      if (!grade) {
+        return {
+          questionId: requestQuestion.questionId,
+          letterGrade: "F",
+          feedback: "Question not graded"
+        };
+      }
+      return {
+        questionId: requestQuestion.questionId,
+        letterGrade: this.normalizeLetterGrade(grade.letterGrade),
+        feedback: typeof grade.feedback === "string" ? grade.feedback : "No feedback provided"
+      };
+    });
+  }
+  normalizeLetterGrade(letter) {
+    if (letter === "A" || letter === "B" || letter === "C" || letter === "D" || letter === "F") {
+      return letter;
+    }
+    return "F";
+  }
+  normalizeError(error) {
+    if (axios.isAxiosError(error)) {
+      const axiosError = error;
+      const data = axiosError.response?.data;
+      const message = data?.error?.message ?? axiosError.message;
+      const status = axiosError.response?.status;
+      return new Error(`Gemini API error${status ? ` (${status})` : ""}: ${message}`);
+    }
+    if (error instanceof Error) {
+      return error;
+    }
+    return new Error("Unknown error when calling Gemini");
+  }
+};
+var singleton = null;
+function getGeminiClient() {
+  if (!singleton) {
+    singleton = new GeminiClient({
+      apiKey: process.env.GEMINI_API_KEY,
+      model: process.env.GEMINI_MODEL,
+      timeoutMs: process.env.GEMINI_TIMEOUT_MS ? Number(process.env.GEMINI_TIMEOUT_MS) : void 0
+    });
+  }
+  return singleton;
+}
+async function gradeWithGemini(request) {
+  const client3 = getGeminiClient();
+  return client3.grade(request);
 }
 
 // server/online-cpp-service.ts
-import axios from "axios";
+import axios2 from "axios";
 var JUDGE0_CONFIG = {
   baseURL: "https://judge0-ce.p.rapidapi.com",
   headers: {
@@ -1293,7 +1129,7 @@ var JUDGE0_CONFIG = {
 var CPP_LANGUAGE_ID = 54;
 async function executeWithJudge0(code, input = "") {
   try {
-    const submissionResponse = await axios.post(
+    const submissionResponse = await axios2.post(
       `${JUDGE0_CONFIG.baseURL}/submissions`,
       {
         language_id: CPP_LANGUAGE_ID,
@@ -1313,7 +1149,7 @@ async function executeWithJudge0(code, input = "") {
     const maxAttempts = 20;
     while (attempts < maxAttempts) {
       await new Promise((resolve) => setTimeout(resolve, 1e3));
-      const resultResponse = await axios.get(
+      const resultResponse = await axios2.get(
         `${JUDGE0_CONFIG.baseURL}/submissions/${token}`,
         { headers: JUDGE0_CONFIG.headers, timeout: 5e3 }
       );
@@ -1348,7 +1184,7 @@ async function executeWithJudge0(code, input = "") {
 }
 async function executeWithWandbox(code, input = "") {
   try {
-    const response = await axios.post(
+    const response = await axios2.post(
       "https://wandbox.org/api/compile.json",
       {
         compiler: "gcc-head",
@@ -1385,7 +1221,7 @@ async function executeWithWandbox(code, input = "") {
 }
 async function executeWithCodeX(code, input = "") {
   try {
-    const response = await axios.post(
+    const response = await axios2.post(
       "https://api.codex.jaagrav.in",
       {
         language: "cpp",
@@ -1418,7 +1254,7 @@ async function executeWithCodeX(code, input = "") {
 }
 async function executeWithOneCompiler(code, input = "") {
   try {
-    const response = await axios.post(
+    const response = await axios2.post(
       "https://onecompiler.com/api/code/exec",
       {
         language: "cpp",
@@ -2028,46 +1864,63 @@ async function registerRoutes(app2) {
       let list = [];
       if (req.user.role === "teacher") {
         const quizzes2 = await storage.getQuizzesByTeacher(req.user.id);
-        list = quizzes2.map((q) => {
+        list = await Promise.all(quizzes2.map(async (q) => {
+          let status = q.status;
+          let updatedQuiz = q;
           if (q.scheduledAt && !["completed", "cancelled"].includes(q.status)) {
             const startMs = new Date(q.scheduledAt).getTime();
             const endMs = startMs + (q.duration ?? 0) * 6e4;
             const nowMs = now.getTime();
             if (!isNaN(startMs) && !isNaN(endMs)) {
               if (nowMs >= endMs) {
-                return { ...q, status: "completed" };
-              }
-              if (nowMs >= startMs && nowMs < endMs) {
-                return { ...q, status: "active" };
+                status = "completed";
+                updatedQuiz = await storage.updateQuiz(q.id, { status: "completed" });
+              } else if (nowMs >= startMs && nowMs < endMs) {
+                status = "active";
+                if (q.status !== "active") {
+                  updatedQuiz = await storage.updateQuiz(q.id, { status: "active" });
+                  const endsAt = new Date(startMs + (q.duration ?? 0) * 6e4);
+                  await storage.setGlobalQuizEndsAt(q.id, endsAt);
+                }
               }
             }
           }
-          return q;
-        });
+          return { ...updatedQuiz, status };
+        }));
       } else {
         const sQuizzes = await storage.getStudentQuizzesByStudent(req.user.id);
         const quizzes2 = await Promise.all(sQuizzes.map((sq) => storage.getQuiz(sq.quizId)));
-        list = quizzes2.map((q, i) => {
+        list = await Promise.all(quizzes2.map(async (q, i) => {
           const sq = sQuizzes[i];
           if (!q) return null;
           let status = q.status;
+          let updatedQuiz = q;
           if (q.scheduledAt && !["completed", "cancelled"].includes(q.status)) {
             const startMs = new Date(q.scheduledAt).getTime();
             const endMs = startMs + (q.duration ?? 0) * 6e4;
             const nowMs = now.getTime();
             if (!isNaN(startMs) && !isNaN(endMs)) {
-              if (nowMs >= endMs) status = "completed";
-              else if (nowMs >= startMs && nowMs < endMs) status = "active";
+              if (nowMs >= endMs) {
+                status = "completed";
+                updatedQuiz = await storage.updateQuiz(q.id, { status: "completed" });
+              } else if (nowMs >= startMs && nowMs < endMs) {
+                status = "active";
+                if (q.status !== "active") {
+                  updatedQuiz = await storage.updateQuiz(q.id, { status: "active" });
+                  const endsAt = new Date(startMs + (q.duration ?? 0) * 6e4);
+                  await storage.setGlobalQuizEndsAt(q.id, endsAt);
+                }
+              }
             }
           }
           return {
-            ...q,
+            ...updatedQuiz,
             status,
             studentStatus: sq.status,
             studentQuizId: sq.id,
             quizId: q.id
           };
-        }).filter(Boolean);
+        }).filter(Boolean));
       }
       res.json(list);
     } catch (error) {
@@ -2103,6 +1956,10 @@ async function registerRoutes(app2) {
         await Promise.all(studentsInClass.map(async (student) => {
           await storage.assignQuizToStudent(quiz.id, student.id);
         }));
+        if (quiz.status === "active") {
+          const endsAt = new Date(quiz.scheduledAt.getTime() + (quiz.duration ?? 0) * 6e4);
+          await storage.setGlobalQuizEndsAt(quiz.id, endsAt);
+        }
       }
       res.status(201).json(quiz);
     } catch (error) {
@@ -2159,10 +2016,12 @@ async function registerRoutes(app2) {
           if (sq.status !== "completed") {
             try {
               const answers = await storage.getStudentAnswersByQuiz(sq.id);
-              const totalScore = answers.reduce((sum, a) => sum + (a.score || 0), 0);
-              const avg = answers.length > 0 ? Math.round(totalScore / answers.length) : 0;
-              await storage.updateStudentQuizStatus(sq.id, "completed", avg);
-              await storage.logAttemptEvent(sq.id, "manual_submit", { reason: "quiz_ended_by_teacher" });
+              if (answers.length > 0) {
+                const totalScore = answers.reduce((sum, a) => sum + (a.score || 0), 0);
+                const avg = answers.length > 0 ? Math.round(totalScore / answers.length) : 0;
+                await storage.updateStudentQuizStatus(sq.id, "completed", avg);
+                await storage.logAttemptEvent(sq.id, "manual_submit", { reason: "quiz_ended_by_teacher" });
+              }
             } catch (e) {
               console.warn("Failed to complete attempt", sq.id, e);
             }
@@ -2177,6 +2036,10 @@ async function registerRoutes(app2) {
         updateData.status = "draft";
       }
       const updatedQuiz = await storage.updateQuiz(quizId, updateData);
+      if (updatedQuiz.status === "active" && quiz.status !== "active") {
+        const endsAt = new Date(updatedQuiz.scheduledAt.getTime() + (updatedQuiz.duration ?? 0) * 6e4);
+        await storage.setGlobalQuizEndsAt(quizId, endsAt);
+      }
       if (Array.isArray(req.body.questionIds) && req.body.questionIds.length > 0) {
         await storage.updateQuizQuestions(quizId, req.body.questionIds);
       }
@@ -2279,8 +2142,13 @@ async function registerRoutes(app2) {
       if (quiz?.scheduledAt && new Date(quiz.scheduledAt).getTime() > Date.now()) {
         return res.status(400).json({ message: "Quiz has not started yet" });
       }
-      const durationMinutes = quiz?.duration ?? 0;
-      const endsAt = new Date(Date.now() + durationMinutes * 6e4);
+      let endsAt;
+      if (studentQuiz.endsAt) {
+        endsAt = studentQuiz.endsAt;
+      } else {
+        const durationMinutes = quiz?.duration ?? 0;
+        endsAt = new Date(Date.now() + durationMinutes * 6e4);
+      }
       await storage.setAttemptPlan(studentQuizId, order, endsAt, true);
       const updatedStudentQuiz = await storage.updateStudentQuizStatus(studentQuizId, "in_progress");
       await storage.logAttemptEvent(studentQuizId, "attempt_start", { endsAt, questionCount: order.length });
@@ -2480,9 +2348,70 @@ async function registerRoutes(app2) {
           }
         }
       }
-      const updatedStudentQuiz = await storage.updateStudentQuizStatus(studentQuizId, "completed");
+      const quiz = await storage.getQuiz(studentQuiz.quizId);
+      const quizQuestions2 = await storage.getQuizQuestions(studentQuiz.quizId);
+      const studentAnswers2 = await storage.getStudentAnswersByQuiz(studentQuizId);
+      const gradeToScore = (letter) => {
+        const gradeMap = { A: 90, B: 80, C: 70, D: 60, F: 0 };
+        return gradeMap[letter] || 0;
+      };
+      const geminiQuestions = quizQuestions2.map((qq) => {
+        const studentAnswer = studentAnswers2.find((sa) => sa.questionId === qq.id);
+        return {
+          questionId: qq.id,
+          prompt: qq.content || "",
+          correctAnswer: qq.answer || "",
+          studentAnswer: studentAnswer?.answer || ""
+        };
+      });
+      const submissionId = `assigned_${studentQuiz.quizId}_${studentQuizId}_${Date.now()}`;
+      const geminiRequest = {
+        submissionId,
+        quizType: "assigned",
+        studentId: studentQuiz.studentId,
+        quizId: studentQuiz.quizId,
+        subject: quiz?.subject || "Object-Oriented Programming with C++",
+        questions: geminiQuestions
+      };
+      let geminiResponse;
+      let questionGrades = [];
+      try {
+        geminiResponse = await gradeWithGemini(geminiRequest);
+        questionGrades = geminiResponse.questionGrades;
+      } catch (error) {
+        console.error("Gemini grading failed, using default grades:", error.message);
+        questionGrades = geminiQuestions.map((q) => ({
+          questionId: q.questionId,
+          letterGrade: "C",
+          feedback: "Auto-grading temporarily unavailable"
+        }));
+        geminiResponse = {
+          questionGrades,
+          model: "fallback"
+        };
+      }
+      for (const studentAnswer of studentAnswers2) {
+        const questionGrade = questionGrades.find((g) => g.questionId === studentAnswer.questionId);
+        if (questionGrade) {
+          const score = gradeToScore(questionGrade.letterGrade);
+          await storage.updateStudentAnswerScore(
+            studentQuizId,
+            studentAnswer.questionId,
+            score,
+            questionGrade.feedback,
+            { letterGrade: questionGrade.letterGrade, model: geminiResponse.model }
+          );
+        }
+      }
+      const totalScore = questionGrades.reduce((sum, grade) => sum + gradeToScore(grade.letterGrade), 0);
+      const averageScore = Math.round(totalScore / questionGrades.length);
+      const updatedStudentQuiz = await storage.updateStudentQuizStatus(studentQuizId, "completed", averageScore);
       await storage.logAttemptEvent(studentQuizId, "manual_submit");
-      res.json(updatedStudentQuiz);
+      res.json({
+        ...updatedStudentQuiz,
+        questionGrades,
+        averageScore
+      });
     } catch (error) {
       console.error("Error completing quiz:", error);
       res.status(500).json({ message: "Error completing quiz" });
@@ -2514,18 +2443,39 @@ async function registerRoutes(app2) {
       }
       const answers = await storage.getStudentAnswersByQuiz(studentQuizId);
       const questions2 = await storage.getQuizQuestions(studentQuiz.quizId);
-      const answersWithQuestions = answers.map((answer) => {
-        const question = questions2.find((q) => q.id === answer.questionId);
-        return {
-          ...answer,
-          question: question ? {
-            id: question.id,
-            content: question.content,
-            type: question.type,
-            answer: question.answer
-            // Include correct answer for grading
-          } : null
-        };
+      const answerMap = new Map(answers.map((a) => [a.questionId, a]));
+      const answersWithQuestions = questions2.map((question) => {
+        const answer = answerMap.get(question.id);
+        if (answer) {
+          return {
+            ...answer,
+            question: {
+              id: question.id,
+              content: question.content,
+              type: question.type,
+              answer: question.answer
+            }
+          };
+        } else {
+          return {
+            id: 0,
+            studentQuizId,
+            questionId: question.id,
+            answer: "",
+            codeAnswer: "",
+            codeOutput: "",
+            codeError: "",
+            score: null,
+            feedback: null,
+            aiAnalysis: null,
+            question: {
+              id: question.id,
+              content: question.content,
+              type: question.type,
+              answer: question.answer
+            }
+          };
+        }
       });
       res.json(answersWithQuestions);
     } catch (error) {
@@ -2533,17 +2483,74 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Error retrieving student answers" });
     }
   });
+  app2.get("/api/student-quizzes/:studentQuizId/results", ensureAuthenticated, async (req, res) => {
+    try {
+      const studentQuizId = parseInt(req.params.studentQuizId);
+      const studentQuiz = await storage.getStudentQuiz(studentQuizId);
+      if (!studentQuiz) return res.status(404).json({ message: "Student quiz not found" });
+      const quiz = await storage.getQuiz(studentQuiz.quizId);
+      const isStudent = studentQuiz.studentId === req.user.id;
+      const isTeacher = quiz && quiz.teacherId === req.user.id;
+      if (!isStudent && !isTeacher) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const answers = await storage.getStudentAnswersByQuiz(studentQuizId);
+      const questions2 = await storage.getQuizQuestions(studentQuiz.quizId);
+      const answerMap = new Map(answers.map((a) => [a.questionId, a]));
+      const answersWithQuestions = questions2.map((question) => {
+        const answer = answerMap.get(question.id);
+        if (answer) {
+          return {
+            ...answer,
+            question: {
+              id: question.id,
+              content: question.content,
+              type: question.type,
+              answer: question.answer
+            }
+          };
+        } else {
+          return {
+            id: 0,
+            studentQuizId,
+            questionId: question.id,
+            answer: "",
+            codeAnswer: "",
+            codeOutput: "",
+            codeError: "",
+            score: null,
+            feedback: null,
+            aiAnalysis: null,
+            question: {
+              id: question.id,
+              content: question.content,
+              type: question.type,
+              answer: question.answer
+            }
+          };
+        }
+      });
+      res.json({
+        studentQuiz,
+        quiz,
+        answers: answersWithQuestions
+      });
+    } catch (error) {
+      console.error("Error getting quiz results:", error);
+      res.status(500).json({ message: "Error retrieving quiz results" });
+    }
+  });
   app2.post("/api/student-quizzes/:studentQuizId/grade", ensureTeacher, async (req, res) => {
     try {
       const studentQuizId = parseInt(req.params.studentQuizId);
-      const { questionId, score, feedback } = req.body;
+      const { questionId, score } = req.body;
       const studentQuiz = await storage.getStudentQuiz(studentQuizId);
       if (!studentQuiz) return res.status(404).json({ message: "Student quiz not found" });
       const quiz = await storage.getQuiz(studentQuiz.quizId);
       if (!quiz || quiz.teacherId !== req.user.id) {
         return res.status(403).json({ message: "Access denied" });
       }
-      const updatedAnswer = await storage.updateStudentAnswerScore(studentQuizId, questionId, score, feedback);
+      const updatedAnswer = await storage.updateStudentAnswerScore(studentQuizId, questionId, score);
       res.json(updatedAnswer);
     } catch (error) {
       console.error("Error grading answer:", error);
@@ -2737,7 +2744,7 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/practice-quiz/generate", ensureStudent, async (req, res) => {
     try {
-      const user = { id: 4 };
+      const user = req.user;
       const { subject, chapter, questionCount = 5 } = req.body;
       if (!subject) {
         return res.status(400).json({ message: "Subject is required" });
@@ -2800,7 +2807,7 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/practice-quiz/submit", ensureStudent, async (req, res) => {
     try {
-      const user = { id: 4 };
+      const user = req.user;
       const { answers, practiceQuizId } = req.body;
       if (!answers || !Array.isArray(answers) || !practiceQuizId) {
         return res.status(400).json({ message: "Invalid submission data" });
@@ -2812,64 +2819,90 @@ async function registerRoutes(app2) {
       if (practiceQuiz.studentId !== user.id) {
         return res.status(403).json({ message: "You don't have permission to submit this quiz" });
       }
-      const gradingResults = await Promise.all(
-        answers.map(async (answerItem) => {
-          const { questionId, answer } = answerItem;
-          const question = await storage.getQuestion(questionId);
-          if (!question) {
-            return {
-              questionId,
-              score: 0,
-              feedback: "Question not found",
-              success: false
-            };
-          }
-          try {
-            const gradingResult = await gradeStudentAnswer(
-              question.content,
-              question.answer,
-              answer,
-              question.subject
-            );
-            const practiceQuizAnswer = await storage.submitPracticeQuizAnswer(
-              practiceQuizId,
-              questionId,
-              answer,
-              gradingResult.score,
-              gradingResult.feedback,
-              gradingResult.analysis
-            );
-            return {
-              questionId,
-              question: question.content,
-              correctAnswer: question.answer,
-              studentAnswer: answer,
-              score: gradingResult.score,
-              feedback: gradingResult.feedback,
-              analysis: gradingResult.analysis,
-              success: true
-            };
-          } catch (error) {
-            console.error("Error grading practice answer:", error);
-            return {
-              questionId,
-              question: question.content,
-              correctAnswer: question.answer,
-              studentAnswer: answer,
-              score: 0,
-              feedback: "Error grading answer",
-              success: false
-            };
-          }
+      const gradeToScore = (letter) => {
+        const gradeMap = { A: 90, B: 80, C: 70, D: 60, F: 0 };
+        return gradeMap[letter] || 0;
+      };
+      const questions2 = await Promise.all(
+        answers.map(async (item) => {
+          const q = await storage.getQuestion(item.questionId);
+          return {
+            questionId: item.questionId,
+            prompt: q?.content || "",
+            correctAnswer: q?.answer || "",
+            studentAnswer: item.answer
+          };
         })
       );
-      const validScores = gradingResults.filter((r) => r.success).map((r) => r.score);
-      const averageScore = validScores.length > 0 ? Math.round(validScores.reduce((sum, score) => sum + score, 0) / validScores.length) : 0;
+      const submissionId = `practice_${practiceQuizId}_${Date.now()}`;
+      const geminiRequest = {
+        submissionId,
+        quizType: "practice",
+        studentId: user.id,
+        practiceQuizId,
+        subject: practiceQuiz.subject,
+        questions: questions2
+      };
+      let geminiResponse;
+      let questionGrades = [];
+      try {
+        geminiResponse = await gradeWithGemini(geminiRequest);
+        questionGrades = geminiResponse.questionGrades;
+      } catch (error) {
+        console.error("Gemini grading failed for practice quiz, using default grades:", error.message);
+        questionGrades = questions2.map((q) => ({
+          questionId: q.questionId,
+          letterGrade: "C",
+          feedback: "Auto-grading temporarily unavailable"
+        }));
+        geminiResponse = {
+          questionGrades,
+          model: "fallback"
+        };
+      }
+      const gradingResults = answers.map((item, idx) => {
+        const questionGrade = questionGrades.find((g) => g.questionId === item.questionId);
+        const score = questionGrade ? gradeToScore(questionGrade.letterGrade) : 70;
+        const feedback = questionGrade ? questionGrade.feedback : "Grade: C";
+        return {
+          questionId: item.questionId,
+          question: questions2[idx].prompt,
+          correctAnswer: questions2[idx].correctAnswer,
+          studentAnswer: item.answer,
+          score,
+          feedback,
+          analysis: questionGrade ? {
+            letterGrade: questionGrade.letterGrade,
+            model: geminiResponse.model,
+            ...questionGrade
+          } : { letterGrade: "C", model: geminiResponse.model },
+          success: true
+        };
+      });
+      for (const [idx, item] of answers.entries()) {
+        const questionGrade = questionGrades.find((g) => g.questionId === item.questionId);
+        const score = questionGrade ? gradeToScore(questionGrade.letterGrade) : 70;
+        const feedback = questionGrade ? questionGrade.feedback : "Grade: C";
+        await storage.submitPracticeQuizAnswer(
+          practiceQuizId,
+          item.questionId,
+          item.answer,
+          score,
+          feedback,
+          questionGrade ? {
+            letterGrade: questionGrade.letterGrade,
+            model: geminiResponse.model,
+            ...questionGrade
+          } : { letterGrade: "C", model: geminiResponse.model }
+        );
+      }
+      const totalScore = questionGrades.reduce((sum, grade) => sum + gradeToScore(grade.letterGrade), 0);
+      const averageScore = Math.round(totalScore / questionGrades.length);
       await storage.updatePracticeQuizStatus(practiceQuizId, "completed", averageScore);
       await storage.createNotification({
         userId: user.id,
         title: "Practice Quiz Results",
-        message: `You completed a practice quiz in ${practiceQuiz.subject} with a score of ${averageScore}%.`,
+        message: `You completed a practice quiz in ${practiceQuiz.subject} with score ${averageScore}%.`,
         type: "practice_quiz_completed",
         relatedId: practiceQuizId
       });
@@ -2886,7 +2919,7 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/practice-quiz/subjects", ensureStudent, async (req, res) => {
     try {
-      const user = { id: 1 };
+      const user = req.user;
       const mainSubjects = [
         "Object-Oriented Programming",
         "Data Structures",
@@ -2951,7 +2984,7 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/practice-quiz/history", ensureStudent, async (req, res) => {
     try {
-      const user = { id: 1 };
+      const user = req.user;
       const practiceQuizzes2 = await storage.getPracticeQuizzesByStudent(user.id);
       res.json({
         practiceQuizzes: practiceQuizzes2
@@ -2963,7 +2996,7 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/practice-quiz/:id", ensureStudent, async (req, res) => {
     try {
-      const user = { id: 1 };
+      const user = req.user;
       const practiceQuizId = parseInt(req.params.id);
       if (isNaN(practiceQuizId)) {
         return res.status(400).json({ message: "Invalid practice quiz ID" });
@@ -3017,54 +3050,20 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Error updating notification" });
     }
   });
-  app2.get("/api/analytics/performance", ensureTeacher, async (req, res) => {
+  app2.delete("/api/notifications/:id", authenticateToken, async (req, res) => {
     try {
-      const teacherId = req.user?.id || 5;
-      const classes2 = await storage.getClassesByTeacher(teacherId);
-      const classStudents2 = [];
-      for (const classItem of classes2) {
-        const students = await storage.getClassStudents(classItem.id);
-        classStudents2.push({
-          class: classItem,
-          students: students.map((s) => {
-            const { password, ...rest } = s;
-            return rest;
-          })
-        });
+      const notificationId = parseInt(req.params.id);
+      if (isNaN(notificationId)) {
+        return res.status(400).json({ message: "Invalid notification ID" });
       }
-      const quizzes2 = await storage.getQuizzesByTeacher(teacherId);
-      const quizPerformance = [];
-      for (const quiz of quizzes2) {
-        const studentQuizzes2 = await storage.getStudentQuizzesByQuiz(quiz.id);
-        quizPerformance.push({
-          quiz,
-          studentPerformance: studentQuizzes2
-        });
+      const deleted = await storage.deleteNotification(notificationId);
+      if (!deleted) {
+        return res.status(404).json({ message: "Notification not found" });
       }
-      res.json({
-        teacherId,
-        classCount: classes2.length,
-        studentCount: classStudents2.reduce((sum, cs) => sum + cs.students.length, 0),
-        quizCount: quizzes2.length,
-        classStudents: classStudents2,
-        quizPerformance
-      });
+      res.json({ message: "Notification deleted successfully" });
     } catch (error) {
-      console.error("Error getting performance analytics:", error);
-      res.status(500).json({ message: "Error retrieving performance analytics" });
-    }
-  });
-  app2.post("/api/analytics/insights", ensureTeacher, async (req, res) => {
-    try {
-      const { studentData, subject } = req.body;
-      if (!studentData || !subject) {
-        return res.status(400).json({ message: "Missing required fields" });
-      }
-      const insights = await generatePerformanceInsights(studentData, subject);
-      res.json(insights);
-    } catch (error) {
-      console.error("Error generating performance insights:", error);
-      res.status(500).json({ message: "Error generating performance insights" });
+      console.error("Error deleting notification:", error);
+      res.status(500).json({ message: "Error deleting notification" });
     }
   });
   app2.post("/api/execute-cpp", async (req, res) => {
@@ -3118,6 +3117,16 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Error fetching attempts" });
     }
   });
+  app2.use("/api/monitoring", (req, _res, next) => {
+    try {
+      if (!req.headers?.authorization && req.query?.token) {
+        req.headers.authorization = `Bearer ${req.query.token}`;
+      }
+    } catch {
+    }
+    next();
+  });
+  app2.use("/api/monitoring", authenticateToken);
   const monitoringSessions = /* @__PURE__ */ new Map();
   const monitoringFrames = /* @__PURE__ */ new Map();
   const consentRequests = /* @__PURE__ */ new Map();
@@ -3309,7 +3318,7 @@ async function registerRoutes(app2) {
 // server/vite.ts
 import express from "express";
 import fs from "fs";
-import path3, { dirname as dirname2 } from "path";
+import path2, { dirname as dirname2 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 import { createServer as createViteServer, createLogger } from "vite";
 
@@ -3317,7 +3326,7 @@ import { createServer as createViteServer, createLogger } from "vite";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import themePlugin from "@replit/vite-plugin-shadcn-theme-json";
-import path2, { dirname } from "path";
+import path, { dirname } from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { fileURLToPath } from "url";
 var __filename = fileURLToPath(import.meta.url);
@@ -3335,16 +3344,16 @@ var vite_config_default = defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path2.resolve(__dirname, "client", "src"),
-      "@shared": path2.resolve(__dirname, "shared")
+      "@": path.resolve(__dirname, "client", "src"),
+      "@shared": path.resolve(__dirname, "shared")
     }
   },
-  root: path2.resolve(__dirname, "client"),
+  root: path.resolve(__dirname, "client"),
   server: {
     // No proxy needed - frontend and backend run on same port in development
   },
   build: {
-    outDir: path2.resolve(__dirname, "dist/public"),
+    outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true
   }
 });
@@ -3386,7 +3395,7 @@ async function setupVite(app2, server) {
   app2.use("*", async (req, res, next) => {
     const url = req.originalUrl;
     try {
-      const clientTemplate = path3.resolve(
+      const clientTemplate = path2.resolve(
         __dirname2,
         "..",
         "client",
@@ -3406,7 +3415,7 @@ async function setupVite(app2, server) {
   });
 }
 function serveStatic(app2) {
-  const distPath = path3.resolve(__dirname2, "public");
+  const distPath = path2.resolve(__dirname2, "public");
   if (!fs.existsSync(distPath)) {
     throw new Error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
@@ -3414,7 +3423,7 @@ function serveStatic(app2) {
   }
   app2.use(express.static(distPath));
   app2.use("*", (_req, res) => {
-    res.sendFile(path3.resolve(distPath, "index.html"));
+    res.sendFile(path2.resolve(distPath, "index.html"));
   });
 }
 
@@ -3579,14 +3588,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 import { WebSocketServer } from "ws";
 import { spawn, exec } from "child_process";
 import fs2 from "fs";
-import path4 from "path";
+import path3 from "path";
 import os from "os";
 var app = express2();
 app.use(express2.json());
 app.use(express2.urlencoded({ extended: false }));
 app.use((req, res, next) => {
   const start = Date.now();
-  const path5 = req.path;
+  const path4 = req.path;
   let capturedJsonResponse = void 0;
   const originalResJson = res.json;
   res.json = function(bodyJson, ...args) {
@@ -3595,8 +3604,8 @@ app.use((req, res, next) => {
   };
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path5.startsWith("/api")) {
-      let logLine = `${req.method} ${path5} ${res.statusCode} in ${duration}ms`;
+    if (path4.startsWith("/api")) {
+      let logLine = `${req.method} ${path4} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
@@ -3828,8 +3837,8 @@ app.use((req, res, next) => {
         cleanup();
         const code = msg.code;
         const tempDir = os.tmpdir();
-        codeFile = path4.join(tempDir, `code_${Date.now()}.cpp`);
-        exeFile = path4.join(tempDir, `exe_${Date.now()}`);
+        codeFile = path3.join(tempDir, `code_${Date.now()}.cpp`);
+        exeFile = path3.join(tempDir, `exe_${Date.now()}`);
         fs2.writeFileSync(codeFile, code);
         exec(`g++ "${codeFile}" -o "${exeFile}"`, (error, stdout, stderr) => {
           if (error) {
@@ -3842,24 +3851,35 @@ app.use((req, res, next) => {
             ws.send(JSON.stringify({ type: "finished" }));
             return;
           }
-          currentProcess = spawn(exeFile, [], { stdio: ["pipe", "pipe", "pipe"] });
-          inputRequested = false;
+          currentProcess = spawn(exeFile, [], {
+            stdio: ["pipe", "pipe", "pipe"],
+            timeout: 3e4
+            // 30 second timeout
+          });
+          let lastOutputTime = Date.now();
+          let inputWaitTimer = null;
           currentProcess.stdout.on("data", (data2) => {
             const output = data2.toString();
             ws.send(JSON.stringify({ type: "output", data: output }));
-            if (!inputRequested && (output.includes("Enter") || output.includes("Input") || output.includes(":") || output.endsWith("?"))) {
-              inputRequested = true;
-              setTimeout(() => {
-                if (currentProcess && !currentProcess.killed) {
+            lastOutputTime = Date.now();
+            if (inputWaitTimer) {
+              clearTimeout(inputWaitTimer);
+              inputWaitTimer = null;
+            }
+            if (!inputRequested && (code.includes("cin") || code.includes("scanf") || code.includes("getline"))) {
+              inputWaitTimer = setTimeout(() => {
+                if (currentProcess && !currentProcess.killed && !inputRequested) {
+                  inputRequested = true;
                   ws.send(JSON.stringify({ type: "input_request", prompt: "> " }));
                 }
-              }, 100);
+              }, 200);
             }
           });
           currentProcess.stderr.on("data", (data2) => {
             ws.send(JSON.stringify({ type: "output", data: data2.toString() }));
           });
           currentProcess.on("close", (code2) => {
+            if (inputWaitTimer) clearTimeout(inputWaitTimer);
             ws.send(JSON.stringify({ type: "output", data: `
 Program finished with exit code ${code2}
 ` }));
@@ -3872,7 +3892,7 @@ Program finished with exit code ${code2}
                 inputRequested = true;
                 ws.send(JSON.stringify({ type: "input_request", prompt: "> " }));
               }
-            }, 500);
+            }, 300);
           }
         });
       } else if (msg.type === "input") {

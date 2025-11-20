@@ -4,8 +4,7 @@ node_modules
 # Build & Compiled Output
 
 # Data
-*.db
-*.sqlite
+
 
 # Environment Variables
 .env
@@ -13,5 +12,6 @@ node_modules
 
 # IDE & OS files
 .vscode
+.vs
 .idea
 *.DS_Store

@@ -209,8 +209,8 @@ export function ProfessionalCppIde({
   }, [code, userInput, showInput]);
 
   return (
-    <Card className="w-full" style={{ height }}>
-      <CardHeader className="pb-2">
+    <Card className="w-full flex flex-col overflow-hidden" style={{ height }}>
+      <CardHeader className="pb-2 flex-shrink-0">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Zap className="h-5 w-5 text-blue-500" />
@@ -252,8 +252,8 @@ export function ProfessionalCppIde({
         </div>
       </CardHeader>
       
-      <CardContent className="p-0">
-        <ResizablePanelGroup direction="horizontal" className="min-h-0">
+      <CardContent className="p-0 flex-1 overflow-hidden flex">
+        <ResizablePanelGroup direction="horizontal" className="min-h-0 flex-1">
           {/* Code Editor Panel */}
           <ResizablePanel defaultSize={60} minSize={40}>
             <div className="h-full flex flex-col">
@@ -268,7 +268,7 @@ export function ProfessionalCppIde({
                   onChange={(e) => handleCodeChange(e.target.value)}
                   readOnly={readOnly}
                   className={`
-                    w-full h-full resize-none border-0 p-4 font-mono text-sm
+                    w-full h-full resize-none border-0 p-4 font-mono text-sm overflow-auto
                     focus:outline-none focus:ring-0
                     ${theme === 'dark' ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-900'}
                   `}

@@ -19,7 +19,7 @@ export const questions = pgTable("questions", {
   chapter: text("chapter"), // nullable - for organizing questions within subjects
   gradeLevel: text("grade_level").notNull(),
   type: text("type").notNull(), // short_answer (BSCS focus)
-  content: text("content").notNull(),
+  content: text("content").notNull().unique(),
   answer: text("answer").notNull(),
   difficulty: text("difficulty").notNull(), // easy, medium, hard
   createdAt: timestamp("created_at").defaultNow(),
@@ -35,6 +35,7 @@ export const quizzes = pgTable("quizzes", {
   duration: integer("duration").notNull(), // in minutes
   scheduledAt: timestamp("scheduled_at"),
   status: text("status").notNull().default("draft"), // draft, scheduled, active, completed
+  resultsPosted: boolean("results_posted").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

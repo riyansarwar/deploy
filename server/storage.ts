@@ -68,6 +68,16 @@ export class Storage {
     }
   }
 
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    try {
+      const [user] = await db.select().from(users).where(eq(users.email, email));
+      return user;
+    } catch (error) {
+      console.error("Error getting user by email:", error);
+      return undefined;
+    }
+  }
+
   async getUsersByRole(role: string): Promise<User[]> {
     try {
       return await db.select().from(users).where(eq(users.role, role));
@@ -328,13 +338,15 @@ export class Storage {
       }
     });
 
-    // Calculate averages and return
-    return Array.from(performanceMap.values()).map((student: any) => ({
-      ...student,
-      averageScore: student.scores.length > 0 
-        ? student.scores.reduce((a: number, b: number) => a + b, 0) / student.scores.length 
-        : null
-    }));
+    // Calculate averages and return only students with quiz data
+    return Array.from(performanceMap.values())
+      .filter((student: any) => student.quizzesCompleted > 0)
+      .map((student: any) => ({
+        ...student,
+        averageScore: student.scores.length > 0
+          ? student.scores.reduce((a: number, b: number) => a + b, 0) / student.scores.length
+          : null
+      }));
   }
 
   async removeStudentFromClass(classId: number, studentId: number): Promise<void> {
@@ -403,6 +415,8 @@ export class Storage {
       .where(eq(studentQuizzes.quizId, quizId));
     return result.map(r => ({ ...r.attempt, student: {
       id: r.student.id,
+      name: `${r.student.firstName} ${r.student.lastName}`,
+      email: r.student.email,
       firstName: r.student.firstName,
       lastName: r.student.lastName,
     }}));
@@ -437,16 +451,38 @@ export class Storage {
   }
 
   // Grading functions
-  async updateStudentAnswerScore(studentQuizId: number, questionId: number, score: number, feedback?: string) {
-    const [row] = await db
+  async updateStudentAnswerScore(studentQuizId: number, questionId: number, score: number, feedback?: string, aiAnalysis?: any) {
+    // First try to update existing record
+    const [updatedRow] = await db
       .update(studentAnswers)
-      .set({ score, feedback })
+      .set({ score, feedback, aiAnalysis })
       .where(and(
         eq(studentAnswers.studentQuizId, studentQuizId),
         eq(studentAnswers.questionId, questionId)
       ))
       .returning();
-    return row;
+
+    if (updatedRow) {
+      return updatedRow;
+    }
+
+    // If no record exists (unanswered question), insert a new one
+    const [insertedRow] = await db
+      .insert(studentAnswers)
+      .values({
+        studentQuizId,
+        questionId,
+        answer: "",
+        codeAnswer: "",
+        codeOutput: "",
+        codeError: "",
+        score,
+        feedback: feedback || null,
+        aiAnalysis
+      })
+      .returning();
+
+    return insertedRow;
   }
 
   async getStudentAnswer(studentQuizId: number, questionId: number) {
@@ -548,11 +584,28 @@ export class Storage {
     return newNotification;
   }
 
-  async markNotificationAsRead(notificationId: number): Promise<void> {
-    await db
+  async markNotificationAsRead(notificationId: number): Promise<Notification | undefined> {
+    const [updatedNotification] = await db
       .update(notifications)
       .set({ read: true })
-      .where(eq(notifications.id, notificationId));
+      .where(eq(notifications.id, notificationId))
+      .returning();
+    return updatedNotification;
+  }
+
+  async deleteNotification(notificationId: number): Promise<boolean> {
+    const result = await db
+      .delete(notifications)
+      .where(eq(notifications.id, notificationId))
+      .returning({ id: notifications.id });
+    return result.length > 0;
+  }
+
+  async setGlobalQuizEndsAt(quizId: number, endsAt: Date): Promise<void> {
+    await db
+      .update(studentQuizzes)
+      .set({ endsAt })
+      .where(eq(studentQuizzes.quizId, quizId));
   }
 
   // Quiz-related methods
@@ -580,11 +633,6 @@ export class Storage {
     return await db.select().from(classes);
   }
 
-  async getClass(id: number): Promise<Class | undefined> {
-    const [classItem] = await db.select().from(classes).where(eq(classes.id, id));
-    return classItem;
-  }
-
   async getClassesByTeacher(teacherId: number): Promise<Class[]> {
     return await db.select().from(classes).where(eq(classes.teacherId, teacherId));
   }
@@ -604,35 +652,6 @@ export class Storage {
       return true;
     } catch (error) {
       console.error("Error adding student to class:", error);
-      return false;
-    }
-  }
-
-  async getClassStudents(classId: number): Promise<User[]> {
-    const result = await db
-      .select({
-        user: users
-      })
-      .from(classStudents)
-      .innerJoin(users, eq(classStudents.studentId, users.id))
-      .where(eq(classStudents.classId, classId));
-
-    return result.map(r => r.user);
-  }
-
-  // Quiz assignments
-  async assignQuizToStudent(quizId: number, studentId: number): Promise<boolean> {
-    try {
-      await db
-        .insert(studentQuizzes)
-        .values({ 
-          quizId, 
-          studentId,
-          status: "assigned"
-        });
-      return true;
-    } catch (error) {
-      console.error("Error assigning quiz to student:", error);
       return false;
     }
   }
@@ -841,7 +860,6 @@ export async function initializeSampleData() {
     // Create sample questions - BSCS focused
     const sampleQuestions = [
       {
-        teacherId: 1,
         content: "Explain the difference between encapsulation and abstraction in object-oriented programming.",
         type: "short_answer",
         answer: "Encapsulation is the practice of bundling data and methods that operate on that data within a single unit (class) and restricting access to some components. Abstraction is the concept of hiding complex implementation details while showing only essential features of an object.",
@@ -850,7 +868,6 @@ export async function initializeSampleData() {
         difficulty: "Medium"
       },
       {
-        teacherId: 1,
         content: "What is the time complexity of searching for an element in a balanced binary search tree?",
         type: "short_answer", 
         answer: "O(log n) where n is the number of nodes in the tree.",
@@ -859,7 +876,6 @@ export async function initializeSampleData() {
         difficulty: "Easy"
       },
       {
-        teacherId: 1,
         content: "Describe the purpose of the TCP three-way handshake in network communication.",
         type: "short_answer",
         answer: "The TCP three-way handshake establishes a reliable connection between client and server by exchanging SYN, SYN-ACK, and ACK packets to synchronize sequence numbers and ensure both parties are ready for data transmission.",
@@ -868,7 +884,6 @@ export async function initializeSampleData() {
         difficulty: "Medium"
       },
       {
-        teacherId: 1,
         content: "What is database normalization and why is it important?",
         type: "short_answer",
         answer: "Database normalization is the process of organizing data to reduce redundancy and improve data integrity. It's important because it eliminates data duplication, reduces storage space, and prevents update anomalies.",
@@ -877,7 +892,6 @@ export async function initializeSampleData() {
         difficulty: "Medium"
       },
       {
-        teacherId: 1,
         content: "Explain the concept of version control in software development.",
         type: "short_answer",
         answer: "Version control is a system that tracks changes to files over time, allowing developers to collaborate, maintain history of changes, revert to previous versions, and manage different branches of development.",
@@ -892,7 +906,7 @@ export async function initializeSampleData() {
       try {
         await db.insert(questions).values(question).onConflictDoNothing();
       } catch (error) {
-        // Question might already exist, continue
+        // Question might already exist due to unique constraint, continue
       }
     }
 

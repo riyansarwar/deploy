@@ -23,11 +23,11 @@ async function createTables() {
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS questions (
       id SERIAL PRIMARY KEY,
-      teacher_id INTEGER NOT NULL REFERENCES users(id),
       subject TEXT NOT NULL,
+      chapter TEXT,
       grade_level TEXT NOT NULL,
       type TEXT NOT NULL,
-      content TEXT NOT NULL,
+      content TEXT NOT NULL UNIQUE,
       answer TEXT NOT NULL,
       difficulty TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT NOW()
@@ -169,6 +169,13 @@ async function createTables() {
       created_at TIMESTAMP DEFAULT NOW()
     );
   `);
+
+  // Add unique constraint to content column if not already present
+  try {
+    await db.execute(sql`ALTER TABLE questions ADD CONSTRAINT questions_content_unique UNIQUE (content);`);
+  } catch (e) {
+    // Constraint might already exist
+  }
 
   console.log('All tables created successfully!');
 }

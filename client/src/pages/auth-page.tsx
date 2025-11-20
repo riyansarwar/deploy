@@ -6,7 +6,6 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 
@@ -18,8 +17,7 @@ export default function AuthPage() {
   const [loginForm, setLoginForm] = useState({
     username: "",
     password: "",
-    role: "student", // Default to student
-    rememberMe: false
+    role: "student" // Default to student
   });
   
   const [registerForm, setRegisterForm] = useState({
@@ -45,7 +43,7 @@ export default function AuthPage() {
     }
     
     try {
-      await login(loginForm.username, loginForm.password, loginForm.rememberMe, loginForm.role);
+      await login(loginForm.username, loginForm.password, loginForm.role);
       toast({
         title: "Success",
         description: "Logged in successfully!",
@@ -135,7 +133,7 @@ export default function AuthPage() {
                 </div>
                 <div className="flex items-center">
                   <div className="w-2 h-2 bg-white rounded-full mr-3"></div>
-                  <span>Detailed performance analytics</span>
+                  <span>Real-time quiz submissions</span>
                 </div>
               </div>
             </div>
@@ -186,21 +184,7 @@ export default function AuthPage() {
                     />
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id="remember"
-                        checked={loginForm.rememberMe}
-                        onCheckedChange={(checked) => 
-                          setLoginForm({ ...loginForm, rememberMe: !!checked })
-                        }
-                      />
-                      <Label htmlFor="remember" className="text-sm">Remember me</Label>
-                    </div>
-                    <Button variant="link" className="text-cyan-600 p-0">
-                      Forgot password?
-                    </Button>
-                  </div>
+
 
                   <div className="space-y-3">
                     <Label>Login as: <span className="text-red-500">*</span></Label>

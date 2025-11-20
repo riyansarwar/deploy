@@ -112,7 +112,7 @@ export default function RecentActivity() {
                       // Navigate based on activity type
                       switch (activity.type) {
                         case "graded":
-                          setLocation("/analytics");
+                          setLocation("/quizzes");
                           break;
                         case "created":
                           setLocation("/quizzes");

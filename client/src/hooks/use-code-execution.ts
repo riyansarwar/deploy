@@ -30,7 +30,7 @@ export function useCodeExecution() {
       setUserInputs([]);
 
       // Check if the code contains cin statements (needs interactive input)
-      const hasCinStatements = /cin\s*>>\s*[a-zA-Z_]/.test(code);
+      const hasCinStatements = /cin\s*>>/.test(code);
       
       if (hasCinStatements && !input) {
         // Interactive mode - start execution and wait for input
@@ -89,18 +89,19 @@ export function useCodeExecution() {
     setShowInput(false);
 
     try {
-      // Count total inputs needed by parsing cin statements
-      const cinMatches = currentCode.match(/cin\s*>>\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\s*>>\s*[a-zA-Z_][a-zA-Z0-9_]*)*)/g) || [];
+      // Count total inputs needed by counting >> operators after cin
+      const cinLines = currentCode.match(/cin\s*>>[\s\S]*?;/g) || [];
       let totalInputsNeeded = 0;
       
-      for (const match of cinMatches) {
-        const variables = match.replace(/cin\s*>>\s*/, '').split('>>').map(v => v.trim());
-        totalInputsNeeded += variables.filter(v => v && v.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)).length;
+      for (const cinLine of cinLines) {
+        // Count each >> as one input
+        const shiftCount = (cinLine.match(/>>/g) || []).length;
+        totalInputsNeeded += shiftCount;
       }
 
       if (newInputs.length < totalInputsNeeded) {
         // Need more input
-        setOutput(prev => prev + 'Enter next value: ');
+        setOutput(prev => prev + `\nEnter next value: `);
         setInputPrompt(`Enter value (${newInputs.length + 1}/${totalInputsNeeded}): `);
         setShowInput(true);
         return;
@@ -108,7 +109,7 @@ export function useCodeExecution() {
 
       // All inputs collected, execute the code
       const allInputs = newInputs.join('\n');
-      setOutput(prev => prev + 'Executing program...\n');
+      setOutput(prev => prev + '\nExecuting program...\n');
       
       const response = await fetch('/api/execute-cpp', {
         method: 'POST',

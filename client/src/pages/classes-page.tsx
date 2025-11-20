@@ -224,12 +224,18 @@ export default function ClassesPage() {
                   {isTeacher ? "My Classes" : "Enrolled Classes"}
                 </h1>
                 <p className="text-gray-600">
-                  {isTeacher 
-                    ? "Manage your classes and student assignments" 
+                  {isTeacher
+                    ? "Manage your classes and student assignments"
                     : "View your enrolled classes and assignments"}
                 </p>
               </div>
-              
+
+              {isTeacher && (
+                <Button onClick={() => setIsCreateDialogOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create New Class
+                </Button>
+              )}
             </div>
 
             {isLoading ? (

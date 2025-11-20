@@ -400,7 +400,6 @@ app.use((req, res, next) => {
     const shownHost = host ?? "0.0.0.0";
     log(`serving on http://${shownHost}:${port}`);
 
-    // Initialize sample data for demonstration
-    try { await initializeSampleData(); } catch (e) { console.error(e); }
+
   });
 })();

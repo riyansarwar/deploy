@@ -5,7 +5,6 @@ import {
   HelpCircle,
   FileText,
   Users,
-  LineChart,
   UserCog,
   Menu,
   GraduationCap,
@@ -117,43 +116,7 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }: SidebarPr
               </div>
             </li>
           )}
-          
-          {isTeacher && (
-            <li>
-              <div 
-                className={cn(
-                  "flex items-center w-full px-3 py-2 text-gray-800 hover:bg-gray-100 rounded-md cursor-pointer",
-                  activeTab === "/students" && "bg-primary-50 text-primary-600"
-                )}
-                onClick={() => {
-                  handleNavigation();
-                  setLocation("/students");
-                }}
-              >
-                <Users className="mr-3 text-lg text-gray-500" />
-                <span>Students</span>
-              </div>
-            </li>
-          )}
-          
-          {isTeacher && (
-            <li>
-              <div 
-                className={cn(
-                  "flex items-center w-full px-3 py-2 text-gray-800 hover:bg-gray-100 rounded-md cursor-pointer",
-                  activeTab === "/analytics" && "bg-primary-50 text-primary-600"
-                )}
-                onClick={() => {
-                  handleNavigation();
-                  setLocation("/analytics");
-                }}
-              >
-                <LineChart className="mr-3 text-lg text-gray-500" />
-                <span>Analytics</span>
-              </div>
-            </li>
-          )}
-          
+
           {/* Classes section for both teachers and students */}
           <li className="px-3 py-2 mt-6 text-xs font-semibold text-gray-500 uppercase">Classes</li>
           <li>

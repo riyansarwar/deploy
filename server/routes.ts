@@ -10,11 +10,7 @@ import {
   insertClassSchema
 } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
-import { 
-  gradeStudentAnswer, 
-  generatePersonalizedQuestion, 
-  generatePerformanceInsights
-} from "./openai";
+import { gradeWithGemini, type GeminiGradeRequest } from "./gemini";
 import { executeCppCodeOnline, formatCppCode, analyzeCppCode } from "./online-cpp-service";
 
 import { NextFunction } from 'express';
@@ -507,8 +503,8 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
       return res.status(400).json({ message: "No questions provided" });
     }
 
-    // Get all existing questions for the teacher for duplicate checking
-    const existingQuestions = await storage.getQuestionsByTeacher(1);
+    // Get all existing questions for duplicate checking
+    const existingQuestions = await storage.getQuestions();
 
     const savedQuestions = [];
     const duplicates = [];
@@ -555,8 +551,7 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
             type: questionData.type,
             difficulty: questionData.difficulty,
             content: questionData.question,
-            answer: questionData.correctAnswer,
-            teacherId: 1
+            answer: questionData.correctAnswer
           });
 
           savedQuestions.push(question);
@@ -593,50 +588,72 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
       if (req.user!.role === "teacher") {
         // Quizzes owned by the teacher
         const quizzes = await storage.getQuizzesByTeacher(req.user!.id);
-        list = quizzes.map((q: any) => {
-          // Derive status based on scheduled window [scheduledAt, scheduledAt + duration)
+        list = await Promise.all(quizzes.map(async (q: any) => {
+          // Check if quiz should become active and set global timer
+          let status = q.status;
+          let updatedQuiz = q;
           if (q.scheduledAt && !["completed", "cancelled"].includes(q.status)) {
             const startMs = new Date(q.scheduledAt).getTime();
             const endMs = startMs + (q.duration ?? 0) * 60_000; // duration in minutes
             const nowMs = now.getTime();
             if (!isNaN(startMs) && !isNaN(endMs)) {
               if (nowMs >= endMs) {
-                return { ...q, status: "completed" };
-              }
-              if (nowMs >= startMs && nowMs < endMs) {
-                return { ...q, status: "active" };
+                status = "completed";
+                // Auto-complete quiz if it expired
+                updatedQuiz = await storage.updateQuiz(q.id, { status: "completed" });
+              } else if (nowMs >= startMs && nowMs < endMs) {
+                status = "active";
+                // If quiz just became active, update database and set global timer
+                if (q.status !== "active") {
+                  updatedQuiz = await storage.updateQuiz(q.id, { status: "active" });
+                  const endsAt = new Date(startMs + (q.duration ?? 0) * 60_000);
+                  await storage.setGlobalQuizEndsAt(q.id, endsAt);
+                }
               }
             }
           }
-          return q;
-        });
+          return { ...updatedQuiz, status };
+        }));
       } else {
         // Student: return assigned quizzes with their attempt status
         const sQuizzes = await storage.getStudentQuizzesByStudent(req.user!.id);
         const quizzes = await Promise.all(sQuizzes.map((sq: any) => storage.getQuiz(sq.quizId)));
-        list = quizzes.map((q: any, i: number) => {
+        list = await Promise.all(quizzes.map(async (q: any, i: number) => {
           const sq = sQuizzes[i];
           // Safety: skip missing quiz records
           if (!q) return null;
-          // Derive status based on scheduled window [scheduledAt, scheduledAt + duration)
+
+          // Check if quiz should become active and set global timer
           let status = q.status;
+          let updatedQuiz = q;
           if (q.scheduledAt && !["completed", "cancelled"].includes(q.status)) {
             const startMs = new Date(q.scheduledAt).getTime();
             const endMs = startMs + (q.duration ?? 0) * 60_000; // duration in minutes
             const nowMs = now.getTime();
             if (!isNaN(startMs) && !isNaN(endMs)) {
-              if (nowMs >= endMs) status = "completed";
-              else if (nowMs >= startMs && nowMs < endMs) status = "active";
+              if (nowMs >= endMs) {
+                status = "completed";
+                // Auto-complete quiz if it expired
+                updatedQuiz = await storage.updateQuiz(q.id, { status: "completed" });
+              } else if (nowMs >= startMs && nowMs < endMs) {
+                status = "active";
+                // If quiz just became active, update database and set global timer
+                if (q.status !== "active") {
+                  updatedQuiz = await storage.updateQuiz(q.id, { status: "active" });
+                  const endsAt = new Date(startMs + (q.duration ?? 0) * 60_000);
+                  await storage.setGlobalQuizEndsAt(q.id, endsAt);
+                }
+              }
             }
           }
           return {
-            ...q,
+            ...updatedQuiz,
             status,
             studentStatus: sq.status,
             studentQuizId: sq.id,
             quizId: q.id,
           };
-        }).filter(Boolean) as any[];
+        }).filter(Boolean)) as any[];
       }
 
       res.json(list);
@@ -684,6 +701,12 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
         await Promise.all(studentsInClass.map(async (student: any) => {
           await storage.assignQuizToStudent(quiz.id, student.id);
         }));
+
+        // If quiz is active, set global endsAt for all assigned students
+        if (quiz.status === "active") {
+          const endsAt = new Date(quiz.scheduledAt!.getTime() + (quiz.duration ?? 0) * 60_000);
+          await storage.setGlobalQuizEndsAt(quiz.id, endsAt);
+        }
       }
 
       res.status(201).json(quiz);
@@ -770,16 +793,20 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
         // Update quiz status first
         const updatedQuiz = await storage.updateQuiz(quizId, { status: "completed" });
 
-        // Auto-complete all attempts for this quiz
+        // Auto-complete only attempts that have been started (have answers)
         const sQuizzes = await storage.getStudentQuizzesByQuiz(quizId);
         for (const sq of sQuizzes) {
           if (sq.status !== "completed") {
             try {
               const answers = await storage.getStudentAnswersByQuiz(sq.id);
-              const totalScore = answers.reduce((sum, a) => sum + (a.score || 0), 0);
-              const avg = answers.length > 0 ? Math.round(totalScore / answers.length) : 0;
-              await storage.updateStudentQuizStatus(sq.id, "completed", avg);
-              await storage.logAttemptEvent(sq.id, "manual_submit", { reason: "quiz_ended_by_teacher" });
+              // Only complete attempts that have at least one answer (student actually started)
+              if (answers.length > 0) {
+                const totalScore = answers.reduce((sum, a) => sum + (a.score || 0), 0);
+                const avg = answers.length > 0 ? Math.round(totalScore / answers.length) : 0;
+                await storage.updateStudentQuizStatus(sq.id, "completed", avg);
+                await storage.logAttemptEvent(sq.id, "manual_submit", { reason: "quiz_ended_by_teacher" });
+              }
+              // Leave attempts with no answers as "assigned" - student never started
             } catch (e) {
               console.warn("Failed to complete attempt", sq.id, e);
             }
@@ -798,6 +825,12 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
       }
 
       const updatedQuiz = await storage.updateQuiz(quizId, updateData);
+
+      // If quiz just became active, set global endsAt for all assigned students
+      if (updatedQuiz.status === "active" && quiz.status !== "active") {
+        const endsAt = new Date(updatedQuiz.scheduledAt!.getTime() + (updatedQuiz.duration ?? 0) * 60_000);
+        await storage.setGlobalQuizEndsAt(quizId, endsAt);
+      }
 
       // Only update questions when the client explicitly sends a non-empty list
       if (Array.isArray(req.body.questionIds) && req.body.questionIds.length > 0) {
@@ -932,13 +965,22 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
       const quizQuestions = await storage.getQuizQuestions(studentQuiz.quizId);
       const order = quizQuestions.map(q => q.id).sort(() => Math.random() - 0.5);
 
-      // Compute endsAt from quiz.duration (minutes)
+      // For global timer: use existing endsAt if set (global timer), otherwise set per-student timer
       const quiz = await storage.getQuiz(studentQuiz.quizId);
       if (quiz?.scheduledAt && new Date(quiz.scheduledAt).getTime() > Date.now()) {
         return res.status(400).json({ message: "Quiz has not started yet" });
       }
-      const durationMinutes = quiz?.duration ?? 0;
-      const endsAt = new Date(Date.now() + durationMinutes * 60_000);
+
+      // Use existing endsAt (global timer) or set per-student timer if not set
+      let endsAt: Date;
+      if (studentQuiz.endsAt) {
+        // Global timer already set
+        endsAt = studentQuiz.endsAt;
+      } else {
+        // Fallback: per-student timer
+        const durationMinutes = quiz?.duration ?? 0;
+        endsAt = new Date(Date.now() + durationMinutes * 60_000);
+      }
 
       // Save plan on student_quizzes and mark in_progress
       await storage.setAttemptPlan(studentQuizId, order, endsAt, true);
@@ -1197,13 +1239,86 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
         }
       }
 
-      // Mark quiz as completed without calculating scores (will be done by teacher grading)
-      const updatedStudentQuiz = await storage.updateStudentQuizStatus(studentQuizId, "completed");
+      // Auto-grade the quiz with Gemini
+      const quiz = await storage.getQuiz(studentQuiz.quizId);
+      const quizQuestions = await storage.getQuizQuestions(studentQuiz.quizId);
+      const studentAnswers = await storage.getStudentAnswersByQuiz(studentQuizId);
+
+      const gradeToScore = (letter: string): number => {
+        const gradeMap: Record<string, number> = { A: 90, B: 80, C: 70, D: 60, F: 0 };
+        return gradeMap[letter] || 0;
+      };
+
+      const geminiQuestions = quizQuestions.map(qq => {
+        const studentAnswer = studentAnswers.find(sa => sa.questionId === qq.id);
+        return {
+          questionId: qq.id,
+          prompt: qq.content || "",
+          correctAnswer: qq.answer || "",
+          studentAnswer: studentAnswer?.answer || ""
+        };
+      });
+
+      const submissionId = `assigned_${studentQuiz.quizId}_${studentQuizId}_${Date.now()}`;
+      const geminiRequest: GeminiGradeRequest = {
+        submissionId,
+        quizType: "assigned",
+        studentId: studentQuiz.studentId,
+        quizId: studentQuiz.quizId,
+        subject: quiz?.subject || "Object-Oriented Programming with C++",
+        questions: geminiQuestions
+      };
+
+      let geminiResponse;
+      let questionGrades: any[] = [];
+
+      try {
+        geminiResponse = await gradeWithGemini(geminiRequest);
+        questionGrades = geminiResponse.questionGrades;
+      } catch (error) {
+        console.error("Gemini grading failed, using default grades:", error.message);
+        // Fallback: give C grade to all questions
+        questionGrades = geminiQuestions.map(q => ({
+          questionId: q.questionId,
+          letterGrade: "C",
+          feedback: "Auto-grading temporarily unavailable"
+        }));
+        geminiResponse = {
+          questionGrades,
+          model: "fallback"
+        };
+      }
+
+      // Update each answer with its individual auto-grade
+      for (const studentAnswer of studentAnswers) {
+        const questionGrade = questionGrades.find(g => g.questionId === studentAnswer.questionId);
+        if (questionGrade) {
+          const score = gradeToScore(questionGrade.letterGrade);
+          await storage.updateStudentAnswerScore(
+            studentQuizId,
+            studentAnswer.questionId,
+            score,
+            questionGrade.feedback,
+            { letterGrade: questionGrade.letterGrade, model: geminiResponse.model }
+          );
+        }
+      }
+
+      // Calculate overall quiz score as average of question scores
+      const totalScore = questionGrades.reduce((sum, grade) => sum + gradeToScore(grade.letterGrade), 0);
+      const averageScore = Math.round(totalScore / questionGrades.length);
+
+      // Mark quiz as completed with auto-grade score
+      const updatedStudentQuiz = await storage.updateStudentQuizStatus(studentQuizId, "completed", averageScore);
 
       // Log completion event
       await storage.logAttemptEvent(studentQuizId, "manual_submit");
 
-      res.json(updatedStudentQuiz);
+      res.json({
+        ...updatedStudentQuiz,
+        questionGrades,
+        averageScore
+      });
     } catch (error) {
       console.error("Error completing quiz:", error);
       res.status(500).json({ message: "Error completing quiz" });
@@ -1250,18 +1365,43 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
       const answers = await storage.getStudentAnswersByQuiz(studentQuizId);
       const questions = await storage.getQuizQuestions(studentQuiz.quizId);
 
-      // Combine answers with question details
-      const answersWithQuestions = answers.map(answer => {
-        const question = questions.find(q => q.id === answer.questionId);
-        return {
-          ...answer,
-          question: question ? {
-            id: question.id,
-            content: question.content,
-            type: question.type,
-            answer: question.answer // Include correct answer for grading
-          } : null
-        };
+      // Create a map of answers by questionId for quick lookup
+      const answerMap = new Map(answers.map(a => [a.questionId, a]));
+
+      // Return all questions with their answers (or empty if unanswered)
+      const answersWithQuestions = questions.map(question => {
+        const answer = answerMap.get(question.id);
+        if (answer) {
+          return {
+            ...answer,
+            question: {
+              id: question.id,
+              content: question.content,
+              type: question.type,
+              answer: question.answer
+            }
+          };
+        } else {
+          // Create an unanswered entry
+          return {
+            id: 0,
+            studentQuizId,
+            questionId: question.id,
+            answer: "",
+            codeAnswer: "",
+            codeOutput: "",
+            codeError: "",
+            score: null,
+            feedback: null,
+            aiAnalysis: null,
+            question: {
+              id: question.id,
+              content: question.content,
+              type: question.type,
+              answer: question.answer
+            }
+          };
+        }
       });
 
       res.json(answersWithQuestions);
@@ -1271,10 +1411,108 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
     }
   });
 
+  app.get("/api/student-quizzes/:studentQuizId/results", ensureAuthenticated, async (req: AuthRequest, res) => {
+    try {
+      const studentQuizId = parseInt(req.params.studentQuizId);
+      const studentQuiz = await storage.getStudentQuiz(studentQuizId);
+
+      if (!studentQuiz) return res.status(404).json({ message: "Student quiz not found" });
+
+      // Verify that the requesting user is either the student or the teacher
+      const quiz = await storage.getQuiz(studentQuiz.quizId);
+      const isStudent = studentQuiz.studentId === req.user!.id;
+      const isTeacher = quiz && quiz.teacherId === req.user!.id;
+
+      if (!isStudent && !isTeacher) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Get all answers
+      const answers = await storage.getStudentAnswersByQuiz(studentQuizId);
+      const questions = await storage.getQuizQuestions(studentQuiz.quizId);
+
+      // Create a map of answers by questionId for quick lookup
+      const answerMap = new Map(answers.map(a => [a.questionId, a]));
+
+      // Return all questions with their answers and grades
+      const answersWithQuestions = questions.map(question => {
+        const answer = answerMap.get(question.id);
+        if (answer) {
+          return {
+            ...answer,
+            question: {
+              id: question.id,
+              content: question.content,
+              type: question.type,
+              answer: question.answer
+            }
+          };
+        } else {
+          return {
+            id: 0,
+            studentQuizId,
+            questionId: question.id,
+            answer: "",
+            codeAnswer: "",
+            codeOutput: "",
+            codeError: "",
+            score: null,
+            feedback: null,
+            aiAnalysis: null,
+            question: {
+              id: question.id,
+              content: question.content,
+              type: question.type,
+              answer: question.answer
+            }
+          };
+        }
+      });
+
+      res.json({
+        studentQuiz,
+        quiz,
+        answers: answersWithQuestions
+      });
+    } catch (error) {
+      console.error("Error getting quiz results:", error);
+      res.status(500).json({ message: "Error retrieving quiz results" });
+    }
+  });
+
+  app.get("/api/quizzes/:quizId/results-summary", ensureTeacher, async (req: AuthRequest, res) => {
+    try {
+      const quizId = parseInt(req.params.quizId);
+      const quiz = await storage.getQuiz(quizId);
+
+      if (!quiz || quiz.teacherId !== req.user!.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const attempts = await storage.getAttemptsWithUsersByQuiz(quizId);
+      
+      const results = attempts.map((attempt: any) => {
+        return {
+          studentQuizId: attempt.id,
+          studentId: attempt.studentId,
+          studentName: attempt.student?.name || 'Unknown',
+          studentEmail: attempt.student?.email || '',
+          score: attempt.score,
+          status: attempt.status
+        };
+      });
+
+      res.json(results);
+    } catch (error) {
+      console.error("Error getting results summary:", error);
+      res.status(500).json({ message: "Error retrieving results summary" });
+    }
+  });
+
   app.post("/api/student-quizzes/:studentQuizId/grade", ensureTeacher, async (req: AuthRequest, res) => {
     try {
       const studentQuizId = parseInt(req.params.studentQuizId);
-      const { questionId, score, feedback } = req.body;
+      const { questionId, score } = req.body;
 
       const studentQuiz = await storage.getStudentQuiz(studentQuizId);
       if (!studentQuiz) return res.status(404).json({ message: "Student quiz not found" });
@@ -1285,7 +1523,7 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
         return res.status(403).json({ message: "Access denied" });
       }
 
-      const updatedAnswer = await storage.updateStudentAnswerScore(studentQuizId, questionId, score, feedback);
+      const updatedAnswer = await storage.updateStudentAnswerScore(studentQuizId, questionId, score);
       res.json(updatedAnswer);
     } catch (error) {
       console.error("Error grading answer:", error);
@@ -1324,6 +1562,9 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
           relatedId: quizId
         });
       }
+
+      // Mark results as posted
+      await storage.updateQuiz(quizId, { resultsPosted: true });
 
       res.json({ message: "Results posted successfully", updatedAttempts: completedAttempts.length });
     } catch (error) {
@@ -1547,8 +1788,7 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
   // Practice Quiz feature for students
   app.post("/api/practice-quiz/generate", ensureStudent, async (req, res) => {
     try {
-      // For demo purposes, use mock student ID 4 (the current logged-in student)
-      const user = {id: 4};
+      const user = req.user!;
 
       const { subject, chapter, questionCount = 5 } = req.body;
 
@@ -1641,16 +1881,13 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
   // Submit and grade practice quiz answers
   app.post("/api/practice-quiz/submit", ensureStudent, async (req, res) => {
     try {
-      // For demo purposes, use mock student ID 4 (the current logged-in student)  
-      const user = {id: 4};
-
+      const user = req.user!;
       const { answers, practiceQuizId } = req.body;
 
       if (!answers || !Array.isArray(answers) || !practiceQuizId) {
         return res.status(400).json({ message: "Invalid submission data" });
       }
 
-      // Verify the practice quiz exists and belongs to this student
       const practiceQuiz = await storage.getPracticeQuiz(practiceQuizId);
 
       if (!practiceQuiz) {
@@ -1661,86 +1898,107 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
         return res.status(403).json({ message: "You don't have permission to submit this quiz" });
       }
 
-      // Process and grade each answer
-      const gradingResults = await Promise.all(
-        answers.map(async (answerItem: { questionId: number; answer: string }) => {
-          const { questionId, answer } = answerItem;
+      const gradeToScore = (letter: string): number => {
+        const gradeMap: Record<string, number> = { A: 90, B: 80, C: 70, D: 60, F: 0 };
+        return gradeMap[letter] || 0;
+      };
 
-          // Get the original question
-          const question = await storage.getQuestion(questionId);
-
-          if (!question) {
-            return {
-              questionId,
-              score: 0,
-              feedback: "Question not found",
-              success: false
-            };
-          }
-
-          // Grade the answer using AI
-          try {
-            const gradingResult = await gradeStudentAnswer(
-              question.content,
-              question.answer,
-              answer,
-              question.subject
-            );
-
-            // Store the graded answer in the database
-            const practiceQuizAnswer = await storage.submitPracticeQuizAnswer(
-              practiceQuizId,
-              questionId,
-              answer,
-              gradingResult.score,
-              gradingResult.feedback,
-              gradingResult.analysis
-            );
-
-            return {
-              questionId,
-              question: question.content,
-              correctAnswer: question.answer,
-              studentAnswer: answer,
-              score: gradingResult.score,
-              feedback: gradingResult.feedback,
-              analysis: gradingResult.analysis,
-              success: true
-            };
-          } catch (error: any) {
-            console.error("Error grading practice answer:", error);
-            return {
-              questionId,
-              question: question.content,
-              correctAnswer: question.answer,
-              studentAnswer: answer,
-              score: 0,
-              feedback: "Error grading answer",
-              success: false
-            };
-          }
+      const questions = await Promise.all(
+        answers.map(async (item: { questionId: number; answer: string }) => {
+          const q = await storage.getQuestion(item.questionId);
+          return {
+            questionId: item.questionId,
+            prompt: q?.content || "",
+            correctAnswer: q?.answer || "",
+            studentAnswer: item.answer
+          };
         })
       );
 
-      // Calculate overall performance
-      const validScores = gradingResults.filter(r => r.success).map(r => r.score);
-      const averageScore = validScores.length > 0 
-        ? Math.round(validScores.reduce((sum, score) => sum + score, 0) / validScores.length) 
-        : 0;
+      const submissionId = `practice_${practiceQuizId}_${Date.now()}`;
+      const geminiRequest: GeminiGradeRequest = {
+        submissionId,
+        quizType: "practice",
+        studentId: user.id,
+        practiceQuizId,
+        subject: practiceQuiz.subject,
+        questions
+      };
 
-      // Update the practice quiz status to completed with the average score
+      let geminiResponse;
+      let questionGrades: any[] = [];
+
+      try {
+        geminiResponse = await gradeWithGemini(geminiRequest);
+        questionGrades = geminiResponse.questionGrades;
+      } catch (error) {
+        console.error("Gemini grading failed for practice quiz, using default grades:", error.message);
+        // Fallback: give C grade to all questions
+        questionGrades = questions.map(q => ({
+          questionId: q.questionId,
+          letterGrade: "C",
+          feedback: "Auto-grading temporarily unavailable"
+        }));
+        geminiResponse = {
+          questionGrades,
+          model: "fallback"
+        };
+      }
+
+      const gradingResults = answers.map((item: any, idx: number) => {
+        const questionGrade = questionGrades.find(g => g.questionId === item.questionId);
+        const score = questionGrade ? gradeToScore(questionGrade.letterGrade) : 70;
+        const feedback = questionGrade ? questionGrade.feedback : "Grade: C";
+
+        return {
+          questionId: item.questionId,
+          question: questions[idx].prompt,
+          correctAnswer: questions[idx].correctAnswer,
+          studentAnswer: item.answer,
+          score,
+          feedback,
+          analysis: questionGrade ? {
+            letterGrade: questionGrade.letterGrade,
+            model: geminiResponse.model,
+            ...questionGrade
+          } : { letterGrade: "C", model: geminiResponse.model },
+          success: true
+        };
+      });
+
+      for (const [idx, item] of answers.entries()) {
+        const questionGrade = questionGrades.find(g => g.questionId === item.questionId);
+        const score = questionGrade ? gradeToScore(questionGrade.letterGrade) : 70;
+        const feedback = questionGrade ? questionGrade.feedback : "Grade: C";
+
+        await storage.submitPracticeQuizAnswer(
+          practiceQuizId,
+          item.questionId,
+          item.answer,
+          score,
+          feedback,
+          questionGrade ? {
+            letterGrade: questionGrade.letterGrade,
+            model: geminiResponse.model,
+            ...questionGrade
+          } : { letterGrade: "C", model: geminiResponse.model }
+        );
+      }
+
+      // Calculate overall practice quiz score as average of question scores
+      const totalScore = questionGrades.reduce((sum, grade) => sum + gradeToScore(grade.letterGrade), 0);
+      const averageScore = Math.round(totalScore / questionGrades.length);
+
       await storage.updatePracticeQuizStatus(practiceQuizId, 'completed', averageScore);
 
-      // Create a notification for the student about their result
       await storage.createNotification({
         userId: user.id,
         title: "Practice Quiz Results",
-        message: `You completed a practice quiz in ${practiceQuiz.subject} with a score of ${averageScore}%.`,
+        message: `You completed a practice quiz in ${practiceQuiz.subject} with score ${averageScore}%.`,
         type: "practice_quiz_completed",
         relatedId: practiceQuizId
       });
 
-      // Return the graded results
       res.json({
         practiceQuizId,
         results: gradingResults,
@@ -1757,8 +2015,7 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
   app.get("/api/practice-quiz/subjects", ensureStudent, async (req, res) => {
     try {
       // ensureStudent middleware already guarantees req.user exists
-      //const user = req.user!;
-      const user = {id: 1};
+      const user = req.user!;
 
       // Define the 5 main CS subjects - OOP must be one of them
       const mainSubjects = [
@@ -1845,9 +2102,7 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
   // Get student's practice quiz history
   app.get("/api/practice-quiz/history", ensureStudent, async (req, res) => {
     try {
-      // ensureStudent middleware already guarantees req.user exists
-      //const user = req.user!;
-      const user = {id: 1};
+      const user = req.user!;
 
       // Get all practice quizzes for this student
       const practiceQuizzes = await storage.getPracticeQuizzesByStudent(user.id);
@@ -1864,9 +2119,7 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
   // Get practice quiz details including questions and answers
   app.get("/api/practice-quiz/:id", ensureStudent, async (req, res) => {
     try {
-      // ensureStudent middleware already guarantees req.user exists
-      //const user = req.user!;
-      const user = {id: 1};
+      const user = req.user!;
 
       const practiceQuizId = parseInt(req.params.id);
 
@@ -1943,80 +2196,26 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
     }
   });
 
-  // Analytics
-  app.get("/api/analytics/performance", ensureTeacher, async (req, res) => {
+  // Delete notification
+  app.delete("/api/notifications/:id", authenticateToken, async (req, res) => {
     try {
-      // Get authenticated teacher's ID with demo fallback
-      const teacherId = req.user?.id || 5;
+      const notificationId = parseInt(req.params.id);
 
-      // Get all classes for the teacher
-      const classes = await storage.getClassesByTeacher(teacherId);
-
-      // Get all students in those classes
-      const classStudents: Array<{
-        class: any;
-        students: Array<Omit<any, "password">>;
-      }> = [];
-
-      for (const classItem of classes) {
-        const students = await storage.getClassStudents(classItem.id);
-        classStudents.push({
-          class: classItem,
-          students: students.map(s => {
-            const { password, ...rest } = s;
-            return rest;
-          })
-        });
+      if (isNaN(notificationId)) {
+        return res.status(400).json({ message: "Invalid notification ID" });
       }
 
-      // Get all quizzes by teacher
-      const quizzes = await storage.getQuizzesByTeacher(teacherId);
+      // Delete the notification
+      const deleted = await storage.deleteNotification(notificationId);
 
-      // Get student quiz assignments and performances
-      const quizPerformance: Array<{
-        quiz: any;
-        studentPerformance: any[];
-      }> = [];
-
-      for (const quiz of quizzes) {
-        const studentQuizzes = await storage.getStudentQuizzesByQuiz(quiz.id);
-        quizPerformance.push({
-          quiz,
-          studentPerformance: studentQuizzes
-        });
+      if (!deleted) {
+        return res.status(404).json({ message: "Notification not found" });
       }
 
-      // Return summary data
-      res.json({
-        teacherId,
-        classCount: classes.length,
-        studentCount: classStudents.reduce((sum, cs) => sum + cs.students.length, 0),
-        quizCount: quizzes.length,
-        classStudents,
-        quizPerformance
-      });
+      res.json({ message: "Notification deleted successfully" });
     } catch (error) {
-      console.error("Error getting performance analytics:", error);
-      res.status(500).json({ message: "Error retrieving performance analytics" });
-    }
-  });
-
-  app.post("/api/analytics/insights", ensureTeacher, async (req, res) => {
-    try {
-      // ensureTeacher middleware already guarantees req.user exists
-      //const user = req.user!;
-
-      const { studentData, subject } = req.body;
-
-      if (!studentData || !subject) {
-        return res.status(400).json({ message: "Missing required fields" });
-      }
-
-      const insights = await generatePerformanceInsights(studentData, subject);
-      res.json(insights);
-    } catch (error) {
-      console.error("Error generating performance insights:", error);
-      res.status(500).json({ message: "Error generating performance insights" });
+      console.error("Error deleting notification:", error);
+      res.status(500).json({ message: "Error deleting notification" });
     }
   });
 

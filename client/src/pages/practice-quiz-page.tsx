@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +25,9 @@ import { Progress } from "@/components/ui/progress";
 import { ProfessionalCppIde } from "@/components/ui/professional-cpp-ide";
 import { Link } from "wouter";
 
+const PRACTICE_QUIZ_STORAGE_KEY = "practice_quiz_session";
+const PRACTICE_QUIZ_STATE_KEY = "practice_quiz_state";
+
 export default function PracticeQuizPage() {
   const { toast } = useToast();
   const [selectedChapter, setSelectedChapter] = useState("");
@@ -37,6 +40,7 @@ export default function PracticeQuizPage() {
   const [currentTab, setCurrentTab] = useState("select");
   const [practiceSession, setPracticeSession] = useState<any>(null);
   const [quizResults, setQuizResults] = useState<any>(null);
+  const [hasResumeOption, setHasResumeOption] = useState(false);
 
   // Get practice quiz history
   const { data: practiceQuizHistory, isLoading: isLoadingHistory } = useQuery({
@@ -67,6 +71,45 @@ export default function PracticeQuizPage() {
     },
     retry: 1,
   });
+
+  // Load saved session from localStorage on component mount
+  useEffect(() => {
+    const savedSession = localStorage.getItem(PRACTICE_QUIZ_STORAGE_KEY);
+    const savedState = localStorage.getItem(PRACTICE_QUIZ_STATE_KEY);
+    
+    if (savedSession && savedState) {
+      try {
+        const session = JSON.parse(savedSession);
+        const state = JSON.parse(savedState);
+        setHasResumeOption(true);
+      } catch (error) {
+        console.error("Error loading saved session:", error);
+        localStorage.removeItem(PRACTICE_QUIZ_STORAGE_KEY);
+        localStorage.removeItem(PRACTICE_QUIZ_STATE_KEY);
+      }
+    }
+  }, []);
+
+  // Save quiz session to localStorage whenever it changes
+  useEffect(() => {
+    if (practiceSession) {
+      localStorage.setItem(PRACTICE_QUIZ_STORAGE_KEY, JSON.stringify(practiceSession));
+    }
+  }, [practiceSession]);
+
+  // Save quiz state to localStorage whenever it changes
+  useEffect(() => {
+    if (practiceSession && (Object.keys(answers).length > 0 || Object.keys(codeAnswers).length > 0)) {
+      const state = {
+        currentQuestionIndex,
+        answers,
+        codeAnswers,
+        showCodeEditor,
+        timestamp: new Date().toISOString()
+      };
+      localStorage.setItem(PRACTICE_QUIZ_STATE_KEY, JSON.stringify(state));
+    }
+  }, [currentQuestionIndex, answers, codeAnswers, showCodeEditor, practiceSession]);
 
   // Generate practice quiz mutation
   const generateQuizMutation = useMutation({
@@ -114,6 +157,9 @@ export default function PracticeQuizPage() {
     onSuccess: (data) => {
       setQuizResults(data);
       setCurrentTab("results");
+      
+      localStorage.removeItem(PRACTICE_QUIZ_STORAGE_KEY);
+      localStorage.removeItem(PRACTICE_QUIZ_STATE_KEY);
       
       // Invalidate the history query to refresh it
       queryClient.invalidateQueries({ queryKey: ["/api/practice-quiz/history"] });
@@ -193,6 +239,38 @@ export default function PracticeQuizPage() {
     });
   };
 
+  // Resume practice quiz from localStorage
+  const handleResumePractice = () => {
+    const savedSession = localStorage.getItem(PRACTICE_QUIZ_STORAGE_KEY);
+    const savedState = localStorage.getItem(PRACTICE_QUIZ_STATE_KEY);
+    
+    if (savedSession && savedState) {
+      try {
+        const session = JSON.parse(savedSession);
+        const state = JSON.parse(savedState);
+        
+        setPracticeSession(session);
+        setCurrentQuestionIndex(state.currentQuestionIndex);
+        setAnswers(state.answers);
+        setCodeAnswers(state.codeAnswers);
+        setShowCodeEditor(state.showCodeEditor);
+        setCurrentTab("quiz");
+        
+        toast({
+          title: "Practice Quiz Resumed",
+          description: "Your previous session has been restored.",
+        });
+      } catch (error) {
+        console.error("Error resuming practice quiz:", error);
+        toast({
+          title: "Error",
+          description: "Failed to resume practice quiz",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
   // Start a new practice quiz
   const handleNewPractice = () => {
     setCurrentTab("select");
@@ -201,6 +279,9 @@ export default function PracticeQuizPage() {
     setAnswers({});
     setCodeAnswers({});
     setShowCodeEditor({});
+    setHasResumeOption(false);
+    localStorage.removeItem(PRACTICE_QUIZ_STORAGE_KEY);
+    localStorage.removeItem(PRACTICE_QUIZ_STATE_KEY);
   };
 
   // Handle text answer changes
@@ -259,6 +340,34 @@ export default function PracticeQuizPage() {
           {/* Chapter Selection Tab */}
           <TabsContent value="select">
             <div className="space-y-6 max-w-3xl mx-auto">
+              {hasResumeOption && (
+                <Card className="border-amber-300 shadow-xl bg-amber-50/90 backdrop-blur-sm hover-lift">
+                  <CardHeader className="bg-gradient-to-br from-amber-50 via-white to-amber-50 border-b border-amber-200">
+                    <CardTitle className="text-xl font-bold text-amber-900 flex items-center gap-2">
+                      <BookOpen className="h-5 w-5 text-amber-600" />
+                      Resume Previous Practice Quiz?
+                    </CardTitle>
+                    <CardDescription className="text-amber-700">
+                      You have an unfinished practice quiz. Click below to continue where you left off.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardFooter className="px-6 py-4 gap-2">
+                    <Button 
+                      onClick={handleResumePractice}
+                      className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-semibold"
+                    >
+                      Resume Practice Quiz
+                    </Button>
+                    <Button 
+                      onClick={handleNewPractice}
+                      variant="outline"
+                      className="border-amber-300 hover:bg-amber-50"
+                    >
+                      Start New Quiz
+                    </Button>
+                  </CardFooter>
+                </Card>
+              )}
               <Card className="border-cyan-200 shadow-xl bg-white/90 backdrop-blur-sm hover-lift">
                 <CardHeader className="bg-gradient-to-br from-cyan-50 via-white to-cyan-50 border-b border-cyan-100">
                   <CardTitle className="text-2xl font-bold text-cyan-900 flex items-center gap-2">
@@ -266,15 +375,15 @@ export default function PracticeQuizPage() {
                     Create Practice Quiz
                   </CardTitle>
                   <CardDescription className="text-cyan-700">
-                    Select a subject and the number of questions for your practice quiz.
+                    Select a chapter and the number of questions for your practice quiz.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6 p-6">
                   <div className="space-y-3">
-                    <Label htmlFor="chapter" className="text-sm font-semibold text-cyan-900">Subject</Label>
+                    <Label htmlFor="chapter" className="text-sm font-semibold text-cyan-900">Chapter</Label>
                     <Select value={selectedChapter} onValueChange={setSelectedChapter}>
                       <SelectTrigger id="chapter" className="bg-cyan-50 border-cyan-300 hover:bg-cyan-100 hover:border-cyan-400 transition-all duration-200 h-12 text-base shadow-sm">
-                        <SelectValue placeholder="Select a subject" />
+                        <SelectValue placeholder="Select a chapter" />
                       </SelectTrigger>
                     <SelectContent>
                       {isLoadingChapters ? (
@@ -349,7 +458,7 @@ export default function PracticeQuizPage() {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Subject</TableHead>
+                            <TableHead>Chapter</TableHead>
                             <TableHead>Questions</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead className="text-right">Score</TableHead>
@@ -359,7 +468,7 @@ export default function PracticeQuizPage() {
                         <TableBody>
                           {practiceQuizHistory?.practiceQuizzes?.map((quiz: any) => (
                             <TableRow key={quiz.id}>
-                              <TableCell className="font-medium">{quiz.subject}</TableCell>
+                              <TableCell className="font-medium">{quiz.chapter}</TableCell>
                               <TableCell>{quiz.questionCount}</TableCell>
                               <TableCell>
                                 <Badge variant={quiz.status === 'completed' ? 'secondary' : 'default'}>
@@ -612,67 +721,11 @@ export default function PracticeQuizPage() {
                               <p className="text-sm">{result.studentAnswer || "(No answer provided)"}</p>
                             </div>
                             
-                            <div className="bg-green-50 p-3 rounded-md mt-2">
-                              <h4 className="text-sm font-medium mb-1 text-green-700">Correct Answer:</h4>
-                              <p className="text-sm">{result.correctAnswer}</p>
-                            </div>
-                            
                             <div className="mt-4">
-                              <h4 className="text-sm font-medium mb-1">Feedback:</h4>
-                              <p className="text-sm whitespace-pre-line">{result.feedback}</p>
+                              <h4 className="text-sm font-medium mb-1">Grade:</h4>
+                              <p className="text-sm font-semibold">{result.analysis?.letterGrade || 'F'}</p>
                             </div>
-                            
-                            {result.analysis && (
-                              <div className="mt-4">
-                                <details className="text-sm">
-                                  <summary className="font-medium cursor-pointer">Detailed Analysis</summary>
-                                  <div className="mt-2 space-y-2">
-                                    <div>
-                                      <span className="font-medium">Correctness:</span> {result.analysis.correctness}%
-                                    </div>
-                                    <div>
-                                      <span className="font-medium">Completeness:</span> {result.analysis.completeness}%
-                                    </div>
-                                    <div>
-                                      <span className="font-medium">Relevance:</span> {result.analysis.relevance}%
-                                    </div>
-                                    
-                                    {result.analysis.keypoints && result.analysis.keypoints.length > 0 && (
-                                      <div>
-                                        <span className="font-medium">Key Points Covered:</span>
-                                        <ul className="list-disc pl-5 mt-1">
-                                          {result.analysis.keypoints.map((point: string, i: number) => (
-                                            <li key={i}>{point}</li>
-                                          ))}
-                                        </ul>
-                                      </div>
-                                    )}
-                                    
-                                    {result.analysis.missingConcepts && result.analysis.missingConcepts.length > 0 && (
-                                      <div>
-                                        <span className="font-medium">Missing Concepts:</span>
-                                        <ul className="list-disc pl-5 mt-1">
-                                          {result.analysis.missingConcepts.map((concept: string, i: number) => (
-                                            <li key={i}>{concept}</li>
-                                          ))}
-                                        </ul>
-                                      </div>
-                                    )}
-                                    
-                                    {result.analysis.misconceptions && result.analysis.misconceptions.length > 0 && (
-                                      <div>
-                                        <span className="font-medium">Misconceptions:</span>
-                                        <ul className="list-disc pl-5 mt-1">
-                                          {result.analysis.misconceptions.map((misconception: string, i: number) => (
-                                            <li key={i}>{misconception}</li>
-                                          ))}
-                                        </ul>
-                                      </div>
-                                    )}
-                                  </div>
-                                </details>
-                              </div>
-                            )}
+
                           </div>
                         </div>
                       </div>

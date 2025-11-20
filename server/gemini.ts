@@ -1,31 +1,36 @@
 import axios, { AxiosError } from "axios";
 
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models";
 const DEFAULT_SUBJECT = "Object-Oriented Programming with C++";
 
-const GEMINI_BASE_PROMPT = `You are an impartial AI grader for Object-Oriented Programming with C++ assessments. Each submission can contain prose explanations and C++ code snippets.
+const GEMINI_BASE_PROMPT = `You are an AI grader for C++ programming assessments. Grade each question individually fairly and educationally.
 
-Evaluate the submission holistically against these criteria:
-1. Correctness of concepts, syntax, and semantics.
-2. Depth of explanation and demonstrated understanding.
-3. Level of detail, including discussion of trade-offs and design reasoning.
-4. Presence and quality of illustrative examples.
+For each question, check if the answer is empty or just whitespace:
+- If EMPTY: Return grade "F"
 
-Assign one letter grade only, using these definitions:
-- A: Exceptional mastery; precise, thorough, and well-explained with strong examples.
-- B: Strong command; minor gaps but largely correct with solid explanations/examples.
-- C: Adequate understanding; noticeable issues yet demonstrates core concepts.
-- D: Limited grasp; substantial mistakes or missing reasoning/examples.
-- F: Fundamentally incorrect or incoherent.
+For non-empty answers, evaluate based on correctness and understanding:
+- A: Completely correct with good explanation (90-100%)
+- B: Mostly correct with adequate explanation (80-89%)
+- C: Basically correct but missing details (70-79%)
+- D: Partially correct but has errors or is unclear (60-69%)
+- F: Mostly incorrect or shows no understanding (0-59%)
+
+Be generous with grading - reward effort and partial understanding. Technical questions should focus on conceptual accuracy over perfect wording.
 
 Respond with deterministic JSON that exactly matches this shape:
 {
   "submissionId": "<repeat the submission id provided>",
-  "letterGrade": "<A|B|C|D|F>",
-  "model": "gemini-2.5-pro"
+  "questionGrades": [
+    {
+      "questionId": <number>,
+      "letterGrade": "<A|B|C|D|F>",
+      "feedback": "<brief constructive feedback>"
+    }
+  ],
+  "model": "gemini-2.0-flash-001"
 }
 
-Do not include scores, feedback, or additional fields. The JSON object must be the only content in your response.`;
+Grade each question individually. The questionGrades array must contain one entry for each question in the submission. Do not include scores or additional fields beyond what's specified.`;
 
 interface GeminiGradeRequestQuestion {
   questionId: number;
@@ -47,9 +52,15 @@ export interface GeminiGradeRequest {
 
 type GeminiLetterGrade = "A" | "B" | "C" | "D" | "F";
 
+export interface GeminiQuestionGrade {
+  questionId: number;
+  letterGrade: GeminiLetterGrade;
+  feedback: string;
+}
+
 export interface GeminiGradeResponse {
   submissionId: string;
-  letterGrade: GeminiLetterGrade;
+  questionGrades: GeminiQuestionGrade[];
   model: string;
   latencyMs?: number;
   rawResponse?: unknown;
@@ -107,21 +118,6 @@ class GeminiClient {
           ],
         },
       ],
-      responseSchema: {
-        type: "object",
-        properties: {
-          submissionId: { type: "string" },
-          letterGrade: { type: "string", enum: ["A", "B", "C", "D", "F"] },
-          model: { type: "string" },
-        },
-        required: ["submissionId", "letterGrade"],
-      },
-      safetySettings: [
-        {
-          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-          threshold: "BLOCK_NONE",
-        },
-      ],
       generationConfig: {
         temperature: 0,
         topP: 0.8,
@@ -166,15 +162,58 @@ class GeminiClient {
   }
 
   private transformResponse(request: GeminiGradeRequest, data: any, latencyMs: number): GeminiGradeResponse {
-    const letterGrade = this.normalizeLetterGrade(data?.letterGrade);
+    // Extract JSON from Gemini response
+    let parsedData: any = {};
+    try {
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) {
+        // Remove markdown code blocks if present
+        const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
+        parsedData = JSON.parse(cleanText);
+      }
+    } catch (error) {
+      console.error('Failed to parse Gemini response JSON:', error);
+      console.error('Raw response:', data);
+    }
+
+    // Normalize question grades
+    const questionGrades = this.normalizeQuestionGrades(parsedData?.questionGrades, request.questions);
 
     return {
-      submissionId: typeof data?.submissionId === "string" ? data.submissionId : request.submissionId,
-      letterGrade,
-      model: typeof data?.model === "string" ? data.model : this.model,
+      submissionId: typeof parsedData?.submissionId === "string" ? parsedData.submissionId : request.submissionId,
+      questionGrades,
+      model: typeof parsedData?.model === "string" ? parsedData.model : this.model,
       latencyMs,
       rawResponse: data,
     };
+  }
+
+  private normalizeQuestionGrades(questionGrades: unknown, requestQuestions: GeminiGradeRequestQuestion[]): GeminiQuestionGrade[] {
+    if (!Array.isArray(questionGrades)) {
+      // Fallback: give F grade to all questions
+      return requestQuestions.map(q => ({
+        questionId: q.questionId,
+        letterGrade: "F" as GeminiLetterGrade,
+        feedback: "Grading failed - please contact instructor"
+      }));
+    }
+
+    return requestQuestions.map(requestQuestion => {
+      const grade = questionGrades.find((g: any) => g?.questionId === requestQuestion.questionId);
+      if (!grade) {
+        return {
+          questionId: requestQuestion.questionId,
+          letterGrade: "F" as GeminiLetterGrade,
+          feedback: "Question not graded"
+        };
+      }
+
+      return {
+        questionId: requestQuestion.questionId,
+        letterGrade: this.normalizeLetterGrade(grade.letterGrade),
+        feedback: typeof grade.feedback === "string" ? grade.feedback : "No feedback provided"
+      };
+    });
   }
 
   private normalizeLetterGrade(letter: unknown): GeminiLetterGrade {
@@ -187,7 +226,8 @@ class GeminiClient {
   private normalizeError(error: unknown): Error {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError;
-      const message = axiosError.response?.data?.error?.message ?? axiosError.message;
+      const data = axiosError.response?.data as any;
+      const message = data?.error?.message ?? axiosError.message;
       const status = axiosError.response?.status;
       return new Error(`Gemini API error${status ? ` (${status})` : ""}: ${message}`);
     }

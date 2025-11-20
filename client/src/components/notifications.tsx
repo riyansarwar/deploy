@@ -13,7 +13,8 @@ import {
   X,
   Users,
   CheckCircle,
-  XCircle
+  XCircle,
+  Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -117,6 +118,27 @@ export function NotificationsPopover() {
     onError: (error: Error) => {
       toast({
         title: "Failed to decline invitation",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete notification mutation
+  const deleteNotificationMutation = useMutation({
+    mutationFn: async (notificationId: number) => {
+      await apiRequest("DELETE", `/api/notifications/${notificationId}`);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Notification deleted",
+        description: "The notification has been deleted.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to delete notification",
         description: error.message,
         variant: "destructive",
       });
@@ -263,16 +285,29 @@ export function NotificationsPopover() {
                       </div>
                     )}
                   </div>
-                  {!notification.read && notification.type !== "class_invitation" && (
+                  <div className="absolute top-2 right-2 flex gap-1">
+                    {!notification.read && notification.type !== "class_invitation" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 opacity-50 hover:opacity-100"
+                        onClick={() => markAsReadMutation.mutate(notification.id)}
+                        title="Mark as read"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6 absolute top-2 right-2 opacity-50 hover:opacity-100"
-                      onClick={() => markAsReadMutation.mutate(notification.id)}
+                      className="h-6 w-6 opacity-50 hover:opacity-100"
+                      onClick={() => deleteNotificationMutation.mutate(notification.id)}
+                      title="Delete notification"
+                      disabled={deleteNotificationMutation.isPending}
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
-                  )}
+                  </div>
                 </div>
               ))}
             </div>

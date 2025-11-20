@@ -36,6 +36,7 @@ interface Answer {
   codeError: string;
   score: number | null;
   feedback: string | null;
+  aiAnalysis: any;
   question: {
     id: number;
     content: string;
@@ -55,7 +56,7 @@ export default function GradingPage() {
   const [selectedAnswer, setSelectedAnswer] = useState<Answer | null>(null);
   const [gradeDialogOpen, setGradeDialogOpen] = useState(false);
   const [currentGrade, setCurrentGrade] = useState<string>("");
-  const [currentFeedback, setCurrentFeedback] = useState<string>("");
+
   // Local copy of student code for testing without saving to database
   const [localCodeCopy, setLocalCodeCopy] = useState<{[key: number]: string}>({});
 
@@ -82,16 +83,14 @@ export default function GradingPage() {
 
   // Grade answer mutation
   const gradeMutation = useMutation({
-    mutationFn: async ({ studentQuizId, questionId, score, feedback }: {
+    mutationFn: async ({ studentQuizId, questionId, score }: {
       studentQuizId: number;
       questionId: number;
       score: number;
-      feedback: string;
     }) => {
       return apiRequest("POST", `/api/student-quizzes/${studentQuizId}/grade`, {
         questionId,
-        score,
-        feedback
+        score
       });
     },
     onSuccess: () => {
@@ -102,7 +101,6 @@ export default function GradingPage() {
       refetchAnswers();
       setGradeDialogOpen(false);
       setCurrentGrade("");
-      setCurrentFeedback("");
     },
     onError: (error: Error) => {
       toast({
@@ -138,7 +136,6 @@ export default function GradingPage() {
   const handleGradeAnswer = (answer: Answer) => {
     setSelectedAnswer(answer);
     setCurrentGrade(answer.score?.toString() || "");
-    setCurrentFeedback(answer.feedback || "");
     setGradeDialogOpen(true);
   };
 
@@ -171,8 +168,7 @@ export default function GradingPage() {
     gradeMutation.mutate({
       studentQuizId: selectedStudentId,
       questionId: selectedAnswer.questionId,
-      score: gradeValue,
-      feedback: currentFeedback
+      score: gradeValue
     });
   };
 
@@ -282,81 +278,100 @@ export default function GradingPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {studentAnswers?.map((answer: Answer) => (
-                  <Card key={answer.id} className="border-l-4 border-l-blue-500">
-                    <CardContent className="pt-4">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex-1">
-                          <h4 className="font-medium mb-2">Question: {answer.question.content}</h4>
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge variant="outline">
-                              {answer.question.type === "coding" ? (
-                                <><Code className="h-3 w-3 mr-1" /> Coding</>
-                              ) : (
-                                <><FileText className="h-3 w-3 mr-1" /> Text</>
+                {studentAnswers?.map((answer: Answer, idx: number) => {
+                  const isUnanswered = !answer.answer && !answer.codeAnswer;
+                  const autoGrade = answer.aiAnalysis?.letterGrade;
+                  const isOverridden = answer.score !== null && autoGrade && autoGrade !== getGradeLetter(answer.score);
+                  
+                  return (
+                    <Card key={`${answer.questionId}-${idx}`} className={`border-l-4 ${isUnanswered ? 'border-l-red-500' : 'border-l-blue-500'}`}>
+                      <CardContent className="pt-4">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="flex-1">
+                            <h4 className="font-medium mb-2">Question {idx + 1}: {answer.question.content}</h4>
+                            <div className="flex items-center gap-2 mb-2 flex-wrap">
+                              <Badge variant="outline">
+                                {answer.question.type === "coding" ? (
+                                  <><Code className="h-3 w-3 mr-1" /> Coding</>
+                                ) : (
+                                  <><FileText className="h-3 w-3 mr-1" /> Text</>
+                                )}
+                              </Badge>
+                              
+                              {isUnanswered && (
+                                <Badge variant="destructive">Not Answered</Badge>
                               )}
-                            </Badge>
-                            <Badge className={getGradeColor(answer.score)}>
-                              {getGradeLetter(answer.score)}
-                            </Badge>
-                          </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleGradeAnswer(answer)}
-                        >
-                          {answer.score !== null ? "Update Grade" : "Grade Answer"}
-                        </Button>
-                      </div>
-
-                      {/* Text Answer */}
-                      {answer.answer && (
-                        <div className="mb-4">
-                          <h5 className="font-medium mb-2">Text Answer:</h5>
-                          <div className="bg-gray-50 p-3 rounded-lg whitespace-pre-wrap">
-                            {answer.answer}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Code Answer */}
-                      {answer.codeAnswer && (
-                        <div className="mb-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <h5 className="font-medium">Code Answer:</h5>
-                            <Badge variant="outline" className="text-xs">
-                              Interactive Testing Mode
-                            </Badge>
-                          </div>
-                          <div className="space-y-3">
-                            <ProfessionalCppIde
-                              initialCode={getCurrentCodeValue(answer)}
-                              onCodeChange={(newCode) => handleCodeChange(answer.id, newCode)}
-                              readOnly={false}
-                              height="400px"
-                            />
-                            <div className="text-xs text-muted-foreground">
-                              💡 You can modify and test the student's code above. Changes are for testing only and will not be saved to the database.
+                              
+                              {autoGrade && (
+                                <Badge variant="outline" className="bg-purple-50">
+                                  <span className="text-xs mr-1">🤖 PERCEIVED:</span>
+                                  {autoGrade}
+                                </Badge>
+                              )}
+                              
+                              {answer.score !== null && (
+                                <Badge className={getGradeColor(answer.score)}>
+                                  {isOverridden ? "📝 Override: " : ""}{getGradeLetter(answer.score)}
+                                </Badge>
+                              )}
                             </div>
                           </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleGradeAnswer(answer)}
+                          >
+                            {answer.score !== null ? "Update Grade" : "Grade Answer"}
+                          </Button>
                         </div>
-                      )}
 
-
-
-                      {/* Feedback */}
-                      {answer.feedback && (
-                        <div className="mb-4">
-                          <h5 className="font-medium mb-2">Feedback:</h5>
-                          <div className="bg-blue-50 p-3 rounded-lg italic">
-                            {answer.feedback}
+                        {/* Student's Answer */}
+                        {isUnanswered ? (
+                          <div className="mb-4 p-3 bg-red-50 rounded-lg border border-red-200">
+                            <p className="text-sm text-red-800 italic">Student did not provide an answer to this question.</p>
                           </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
+                        ) : (
+                          <>
+                            {/* Text Answer */}
+                            {answer.answer && (
+                              <div className="mb-4">
+                                <h5 className="font-medium mb-2">Student's Text Answer:</h5>
+                                <div className="bg-gray-50 p-3 rounded-lg whitespace-pre-wrap border">
+                                  {answer.answer}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Code Answer */}
+                            {answer.codeAnswer && (
+                              <div className="mb-4">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <h5 className="font-medium">Student's Code:</h5>
+                                  <Badge variant="outline" className="text-xs">
+                                    Read-Only Testing
+                                  </Badge>
+                                </div>
+                                <div className="space-y-3">
+                                  <ProfessionalCppIde
+                                    initialCode={getCurrentCodeValue(answer)}
+                                    onCodeChange={(newCode) => handleCodeChange(answer.id, newCode)}
+                                    readOnly={true}
+                                    height="400px"
+                                  />
+                                  <div className="text-xs text-muted-foreground">
+                                    💡 You can test the code above without modifying it. Use the testing pane to verify functionality.
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+
+
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </CardContent>
@@ -408,15 +423,7 @@ export default function GradingPage() {
                 </Select>
               </div>
 
-              <div>
-                <label className="text-sm font-medium mb-2 block">Feedback:</label>
-                <Textarea
-                  value={currentFeedback}
-                  onChange={(e) => setCurrentFeedback(e.target.value)}
-                  placeholder="Provide constructive feedback..."
-                  rows={4}
-                />
-              </div>
+
 
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setGradeDialogOpen(false)}>

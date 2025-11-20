@@ -233,6 +233,10 @@ async function executeWithOneCompiler(code: string, input: string = ""): Promise
   }
 }
 
+
+
+
+
 /**
  * Main function to execute C++ code with fallback services
  */
@@ -262,17 +266,17 @@ export async function executeCppCodeOnline(code: string, input: string = ""): Pr
   ];
 
   let lastError = '';
-  
+
   for (const service of services) {
     try {
       console.log(`Trying ${service.name} API...`);
       const result = await service.executor(code, input);
-      
+
       if (result.success || result.output) {
         console.log(`✓ ${service.name} API succeeded`);
         return result;
       }
-      
+
     } catch (error) {
       lastError = error.message;
       console.log(`✗ ${service.name} API failed:`, error.message);

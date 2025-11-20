@@ -302,7 +302,9 @@ export default function TakeQuizPage() {
       const answersToSubmit = questions?.map(q => ({
         questionId: q.id,
         answer: answers[q.id] || "",
-        codeAnswer: codeAnswers[q.id] || ""
+        codeAnswer: codeAnswers[q.id] || "",
+        codeOutput: codeOutputs[q.id] || "",
+        codeError: codeErrors[q.id] || ""
       })) || [];
 
       return apiRequest("POST", `/api/student-quizzes/${studentQuizId}/complete`, {

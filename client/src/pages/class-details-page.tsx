@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { ArrowLeft, Users, BookOpen, TrendingUp, TrendingDown, Calendar, Award, UserCheck, UserX, Plus } from "lucide-react";
+import { ArrowLeft, Users, BookOpen, Calendar, Award, UserX, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { ClassInviteDialog } from "@/components/class-invite-dialog";
@@ -40,6 +40,7 @@ export default function ClassDetailsPage({ params }: ClassDetailsPageProps) {
     classId: null as number | null,
     className: ""
   });
+
   const { toast } = useToast();
   const { user } = useAuth();
   const isTeacher = user?.role === "teacher";
@@ -60,12 +61,6 @@ export default function ClassDetailsPage({ params }: ClassDetailsPageProps) {
     queryKey: [`/api/classes/${classId}/quizzes`],
   });
 
-  // Fetch student performance data
-  const { data: performance = [], isLoading: isPerformanceLoading } = useQuery({
-    queryKey: [`/api/classes/${classId}/performance`],
-    enabled: isTeacher,
-  });
-
   // Remove student from class mutation
   const removeStudentMutation = useMutation({
     mutationFn: async (studentId: number) => {
@@ -77,7 +72,6 @@ export default function ClassDetailsPage({ params }: ClassDetailsPageProps) {
         description: "Student has been removed from the class.",
       });
       queryClient.invalidateQueries({ queryKey: [`/api/classes/${classId}/students`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/classes/${classId}/performance`] });
     },
     onError: (error: Error) => {
       toast({
@@ -93,11 +87,6 @@ export default function ClassDetailsPage({ params }: ClassDetailsPageProps) {
       removeStudentMutation.mutate(studentId);
     }
   };
-
-  // Get top and low performers
-  const sortedPerformance = [...performance].sort((a, b) => (b.averageScore || 0) - (a.averageScore || 0));
-  const topPerformers = sortedPerformance.slice(0, 3);
-  const lowPerformers = sortedPerformance.slice(-3).reverse();
 
   if (isClassLoading) {
     return (
@@ -188,34 +177,17 @@ export default function ClassDetailsPage({ params }: ClassDetailsPageProps) {
               </Card>
 
               {isTeacher && (
-                <>
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Average Score</CardTitle>
-                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">
-                        {performance.length > 0 
-                          ? `${Math.round(performance.reduce((acc, curr) => acc + (curr.averageScore || 0), 0) / performance.length)}%`
-                          : "N/A"
-                        }
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Completed Quizzes</CardTitle>
-                      <Award className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">
-                        {quizzes.filter(quiz => quiz.status === "completed").length}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Completed Quizzes</CardTitle>
+                    <Award className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {quizzes.filter(quiz => quiz.status === "completed").length}
+                    </div>
+                  </CardContent>
+                </Card>
               )}
             </div>
 
@@ -225,7 +197,7 @@ export default function ClassDetailsPage({ params }: ClassDetailsPageProps) {
                 <div className="flex items-center justify-between">
                   <CardTitle>Students ({students.length})</CardTitle>
                   {isTeacher && (
-                    <Button 
+                    <Button
                       onClick={() => setInviteDialog({
                         open: true,
                         classId: classId,
@@ -349,96 +321,13 @@ export default function ClassDetailsPage({ params }: ClassDetailsPageProps) {
               </CardContent>
             </Card>
 
-            {/* Performance Section - Only for Teachers */}
-            {isTeacher && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Top Performers */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center space-x-2">
-                      <TrendingUp className="h-5 w-5 text-green-600" />
-                      <span>Top Performers</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {isPerformanceLoading ? (
-                      <div className="space-y-3">
-                        {[...Array(3)].map((_, i) => (
-                          <Skeleton key={i} className="h-12 w-full" />
-                        ))}
-                      </div>
-                    ) : topPerformers.length > 0 ? (
-                      <div className="space-y-3">
-                        {topPerformers.map((performer: any, index: number) => (
-                          <div key={performer.studentId} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                            <div className="flex items-center space-x-3">
-                              <div className="flex items-center justify-center w-8 h-8 bg-green-100 rounded-full text-green-800 font-semibold text-sm">
-                                #{index + 1}
-                              </div>
-                              <div>
-                                <p className="font-medium">{performer.studentName}</p>
-                                <p className="text-sm text-gray-600">{performer.quizzesCompleted} quizzes completed</p>
-                              </div>
-                            </div>
-                            <Badge className="bg-green-100 text-green-800">
-                              {Math.round(performer.averageScore || 0)}%
-                            </Badge>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-center py-8 text-gray-500">No performance data available yet.</p>
-                    )}
-                  </CardContent>
-                </Card>
 
-                {/* Low Performers */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center space-x-2">
-                      <TrendingDown className="h-5 w-5 text-red-600" />
-                      <span>Needs Improvement</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {isPerformanceLoading ? (
-                      <div className="space-y-3">
-                        {[...Array(3)].map((_, i) => (
-                          <Skeleton key={i} className="h-12 w-full" />
-                        ))}
-                      </div>
-                    ) : lowPerformers.length > 0 ? (
-                      <div className="space-y-3">
-                        {lowPerformers.map((performer: any) => (
-                          <div key={performer.studentId} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                            <div className="flex items-center space-x-3">
-                              <div className="flex items-center justify-center w-8 h-8 bg-red-100 rounded-full text-red-800 font-semibold text-sm">
-                                !
-                              </div>
-                              <div>
-                                <p className="font-medium">{performer.studentName}</p>
-                                <p className="text-sm text-gray-600">{performer.quizzesCompleted} quizzes completed</p>
-                              </div>
-                            </div>
-                            <Badge className="bg-red-100 text-red-800">
-                              {Math.round(performer.averageScore || 0)}%
-                            </Badge>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-center py-8 text-gray-500">No performance data available yet.</p>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            )}
           </div>
         </main>
       </div>
 
       {/* Class invitation dialog */}
-      <ClassInviteDialog 
+      <ClassInviteDialog
         open={inviteDialog.open}
         onOpenChange={(open) => setInviteDialog(prev => ({ ...prev, open }))}
         classId={inviteDialog.classId!}
