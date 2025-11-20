@@ -417,7 +417,4 @@ process.on('unhandledRejection', (reason, promise) => {
     console.error('Fatal error during startup:', err);
     process.exit(1);
   }
-}).catch((err) => {
-  console.error('Promise rejection in main function:', err);
-  process.exit(1);
-});
+})();
