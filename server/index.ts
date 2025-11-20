@@ -42,11 +42,22 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
-  // Ensure DB tables/columns exist (adds missing columns like question_order, ends_at, etc.)
-  try { await createTables(); } catch (e) { console.error("Migration failed:", e); }
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  process.exit(1);
+});
 
-  await registerRoutes(app);
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
+
+(async () => {
+  try {
+    // Ensure DB tables/columns exist (adds missing columns like question_order, ends_at, etc.)
+    try { await createTables(); } catch (e) { console.error("Migration failed:", e); }
+
+    await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -395,10 +406,18 @@ app.use((req, res, next) => {
   const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 5000;
   const host = (process.env.HOST || "").trim() || undefined; // undefined = all interfaces
 
-  server.listen(port, host, async () => {
-    const shownHost = host ?? "0.0.0.0";
-    log(`serving on http://${shownHost}:${port}`);
-
-
+  await new Promise<void>((resolve, reject) => {
+    server.listen(port, host, () => {
+      const shownHost = host ?? "0.0.0.0";
+      log(`serving on http://${shownHost}:${port}`);
+      resolve();
+    }).on('error', reject);
   });
-})();
+  } catch (err) {
+    console.error('Fatal error during startup:', err);
+    process.exit(1);
+  }
+}).catch((err) => {
+  console.error('Promise rejection in main function:', err);
+  process.exit(1);
+});
