@@ -10,6 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
+console.log('[startup] Creating express app');
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -54,10 +55,13 @@ process.on('unhandledRejection', (reason, promise) => {
 
 (async () => {
   try {
+    console.log('[startup] Starting async initialization');
     // Ensure DB tables/columns exist (adds missing columns like question_order, ends_at, etc.)
     try { await createTables(); } catch (e) { console.error("Migration failed:", e); }
 
+    console.log('[startup] Creating tables done, registering routes');
     await registerRoutes(app);
+    console.log('[startup] Routes registered');
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -396,25 +400,35 @@ process.on('unhandledRejection', (reason, promise) => {
     });
   });
 
+  console.log('[startup] Setting up vite/static. ENV:', app.get("env"));
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
+  console.log('[startup] Vite/static setup complete');
 
   // ✅ Simple, Windows-safe listen: no reusePort, proper args order
   const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 5000;
   const host = (process.env.HOST || "").trim() || undefined; // undefined = all interfaces
 
+  console.log('[startup] About to start server on port:', port, 'host:', host);
   await new Promise<void>((resolve, reject) => {
     server.listen(port, host, () => {
       const shownHost = host ?? "0.0.0.0";
       log(`serving on http://${shownHost}:${port}`);
+      console.log('[startup] Server is now listening');
       resolve();
-    }).on('error', reject);
+    }).on('error', (err) => {
+      console.error('[startup] Server error:', err);
+      reject(err);
+    });
   });
   } catch (err) {
-    console.error('Fatal error during startup:', err);
+    console.error('[startup] Fatal error during startup:', err);
     process.exit(1);
   }
-})();
+})().catch((err) => {
+  console.error('[startup] IIFE Promise rejection:', err);
+  process.exit(1);
+});

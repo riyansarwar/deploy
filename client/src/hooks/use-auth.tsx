@@ -12,7 +12,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (username: string, password: string, rememberMe?: boolean, role?: string) => Promise<void>;
+  login: (username: string, password: string, role?: string, rememberMe?: boolean) => Promise<void>;
   register: (email: string, password: string, firstName: string, lastName: string, role: string, username: string) => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = async (username: string, password: string, rememberMe: boolean = false, role?: string) => {
+  const login = async (username: string, password: string, role?: string, rememberMe: boolean = false) => {
     setLoading(true);
     try {
       const response = await fetch("/api/login", {
