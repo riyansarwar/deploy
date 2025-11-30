@@ -183,11 +183,7 @@ export class Storage {
         query = query.where(and(...conditions));
       }
 
-      const result = await query.orderBy(
-        sql`COALESCE(${questions.chapter}, ${questions.subject})`,
-        questions.gradeLevel,
-        questions.id
-      );
+      const result = await query.orderBy(questions.id);
       return result;
     } catch (error) {
       console.error("Error searching questions:", error);
