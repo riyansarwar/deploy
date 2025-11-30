@@ -216,14 +216,14 @@ export default function ClassesPage() {
           setMobileMenuOpen={setMobileMenuOpen} 
         />
         
-        <main className="flex-1 ml-0 md:ml-64 bg-gray-50 pt-16 min-h-screen">
+        <main className="flex-1 ml-0 md:ml-64 bg-background dark:bg-background pt-16 min-h-screen">
           <div className="p-4 md:p-6">
             <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">
+                <h1 className="text-2xl font-bold text-foreground dark:text-primary">
                   {isTeacher ? "My Classes" : "Enrolled Classes"}
                 </h1>
-                <p className="text-gray-600">
+                <p className="text-muted-foreground dark:text-sidebar-foreground/70">
                   {isTeacher
                     ? "Manage your classes and student assignments"
                     : "View your enrolled classes and assignments"}
@@ -231,7 +231,11 @@ export default function ClassesPage() {
               </div>
 
               {isTeacher && (
-                <Button onClick={() => setIsCreateDialogOpen(true)}>
+                <Button 
+                  variant="default"
+                  className="mt-4 md:mt-0 shadow-md"
+                  onClick={() => setIsCreateDialogOpen(true)}
+                >
                   <Plus className="mr-2 h-4 w-4" />
                   Create New Class
                 </Button>
@@ -276,7 +280,7 @@ export default function ClassesPage() {
                             <Button 
                               variant="ghost" 
                               size="sm" 
-                              className="h-8 w-8 p-0 text-red-500"
+                              className="h-8 w-8 p-0 text-destructive dark:text-red-300"
                               onClick={() => handleDelete(classItem.id, classItem.name)}
                             >
                               <Trash className="h-4 w-4" />
@@ -288,23 +292,23 @@ export default function ClassesPage() {
                     </CardHeader>
                     <CardContent className="pt-4">
                       <div className="flex items-center mb-2">
-                        <Users className="h-4 w-4 mr-2 text-gray-500" />
+                        <Users className="h-4 w-4 mr-2 text-muted-foreground dark:text-sidebar-foreground/70" />
                         <span>
                           {classItem.studentCount || classItem.students?.length || 0} Students
                         </span>
                       </div>
                       <div className="flex items-center">
                         {isTeacher ? (
-                          <School className="h-4 w-4 mr-2 text-gray-500" />
+                          <School className="h-4 w-4 mr-2 text-muted-foreground dark:text-sidebar-foreground/70" />
                         ) : (
-                          <GraduationCap className="h-4 w-4 mr-2 text-gray-500" />
+                          <GraduationCap className="h-4 w-4 mr-2 text-muted-foreground dark:text-sidebar-foreground/70" />
                         )}
                         <span>
                           {isTeacher ? "Teacher" : "Enrolled"}
                         </span>
                       </div>
                     </CardContent>
-                    <CardFooter className="border-t pt-4 bg-gray-50">
+                    <CardFooter className="border-t border-border dark:border-sidebar-border pt-4 bg-card dark:bg-background/50">
                       <Button 
                         className="w-full"
                         onClick={() => setLocation(`/classes/${classItem.id}`)}
@@ -317,22 +321,22 @@ export default function ClassesPage() {
                 ))}
               </div>
             ) : (
-              <div className="bg-white rounded-md p-6 text-center">
-                <div className="mx-auto mb-4 bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center">
+              <div className="bg-card dark:bg-card rounded-md p-6 text-center">
+                <div className="mx-auto mb-4 bg-muted dark:bg-sidebar-accent rounded-full w-16 h-16 flex items-center justify-center">
                   {isTeacher ? (
-                    <School className="h-8 w-8 text-gray-500" />
+                    <School className="h-8 w-8 text-muted-foreground dark:text-primary" />
                   ) : (
-                    <GraduationCap className="h-8 w-8 text-gray-500" />
+                    <GraduationCap className="h-8 w-8 text-muted-foreground dark:text-primary" />
                   )}
                 </div>
-                <h3 className="text-lg font-medium mb-2">No Classes Found</h3>
-                <p className="text-gray-500 mb-4">
+                <h3 className="text-lg font-medium mb-2 text-foreground dark:text-primary">No Classes Found</h3>
+                <p className="text-muted-foreground dark:text-sidebar-foreground/70 mb-4">
                   {isTeacher 
                     ? "You haven't created any classes yet" 
                     : "You're not enrolled in any classes"}
                 </p>
                 {isTeacher && (
-                  <Button onClick={() => setIsCreateDialogOpen(true)}>
+                  <Button variant="default" className="shadow-md" onClick={() => setIsCreateDialogOpen(true)}>
                     <Plus className="mr-2 h-4 w-4" />
                     Create Your First Class
                   </Button>
@@ -424,7 +428,12 @@ export default function ClassesPage() {
               />
               
               <DialogFooter>
-                <Button type="submit" disabled={createClassMutation.isPending || updateClassMutation.isPending}>
+                <Button 
+                  type="submit" 
+                  variant="default"
+                  className="w-full shadow-md"
+                  disabled={createClassMutation.isPending || updateClassMutation.isPending}
+                >
                   {editing.isOpen 
                     ? (updateClassMutation.isPending ? "Updating..." : "Update Class")
                     : (createClassMutation.isPending ? "Creating..." : "Create Class")

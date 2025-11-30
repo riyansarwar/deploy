@@ -42,7 +42,7 @@ export default function StatsCard({
       <div className="flex items-center justify-between">
         <div>
           <p className="text-primary/70 text-sm font-medium">{title}</p>
-          <h3 className="text-2xl font-bold bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent">{value}</h3>
+          <h3 className="text-2xl font-bold text-primary">{value}</h3>
         </div>
         <div className={`w-12 h-12 rounded-full ${iconBgColor} flex items-center justify-center ${iconColor} shadow-md hover:shadow-lg transition-all duration-300 hover:scale-110`}>
           {icon}

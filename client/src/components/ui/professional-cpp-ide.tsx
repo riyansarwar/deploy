@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Play, Square, RotateCcw, Zap, Moon, Sun } from 'lucide-react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
@@ -209,11 +208,11 @@ export function ProfessionalCppIde({
   }, [code, userInput, showInput]);
 
   return (
-    <Card className="w-full flex flex-col overflow-hidden" style={{ height }}>
+    <Card className="w-full flex flex-col overflow-hidden border border-border/70 dark:border-sidebar-border bg-card dark:bg-card text-foreground" style={{ height }}>
       <CardHeader className="pb-2 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <Zap className="h-5 w-5 text-blue-500" />
+          <CardTitle className="flex items-center gap-2 text-foreground dark:text-primary">
+            <Zap className="h-5 w-5 text-primary" />
             C++ IDE
           </CardTitle>
           
@@ -230,7 +229,7 @@ export function ProfessionalCppIde({
             <Button 
               onClick={isRunning ? stopExecution : executeCode} 
               disabled={!code.trim()}
-              className={isRunning ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"}
+              className={`${isRunning ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"} text-white shadow-md`}
             >
               {isRunning ? (
                 <>
@@ -257,7 +256,7 @@ export function ProfessionalCppIde({
           {/* Code Editor Panel */}
           <ResizablePanel defaultSize={60} minSize={40}>
             <div className="h-full flex flex-col">
-              <div className="px-3 py-2 border-b bg-muted/30">
+              <div className="px-3 py-2 border-b border-border/60 dark:border-sidebar-border/60 bg-muted/40 dark:bg-sidebar-background/40">
                 <span className="text-sm font-medium">Code Editor</span>
               </div>
               
@@ -270,7 +269,9 @@ export function ProfessionalCppIde({
                   className={`
                     w-full h-full resize-none border-0 p-4 font-mono text-sm overflow-auto
                     focus:outline-none focus:ring-0
-                    ${theme === 'dark' ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-900'}
+                    ${theme === 'dark' 
+                      ? 'bg-[#050b16] text-slate-100 placeholder:text-slate-400' 
+                      : 'bg-white text-slate-900 placeholder:text-slate-600'}
                   `}
                   placeholder="Enter your C++ code here..."
                   spellCheck={false}
@@ -303,7 +304,7 @@ export function ProfessionalCppIde({
           {/* Console Panel */}
           <ResizablePanel defaultSize={40} minSize={30}>
             <div className="h-full flex flex-col">
-              <div className="px-3 py-2 border-b bg-muted/30 flex items-center justify-between">
+              <div className="px-3 py-2 border-b border-border/60 dark:border-sidebar-border/60 bg-muted/40 dark:bg-sidebar-background/40 flex items-center justify-between">
                 <span className="text-sm font-medium">Console</span>
                 <Button 
                   variant="ghost" 
@@ -321,7 +322,7 @@ export function ProfessionalCppIde({
                 <div 
                   className={`
                     flex-1 p-3 font-mono text-sm whitespace-pre-wrap overflow-auto
-                    ${theme === 'dark' ? 'bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-900'}
+                    ${theme === 'dark' ? 'bg-[#050b16] text-slate-100' : 'bg-slate-50 text-slate-900'}
                   `}
                 >
                   {output || error || 'Ready to run code...'}
@@ -329,7 +330,7 @@ export function ProfessionalCppIde({
                 
                 {/* Input Area (shown when program needs input) */}
                 {showInput && (
-                  <div className="border-t p-3 bg-muted/30">
+                  <div className="border-t border-border/60 dark:border-sidebar-border/60 p-3 bg-muted/40 dark:bg-sidebar-background/40">
                     <div className="text-xs text-muted-foreground mb-2">
                       {inputPrompt}
                     </div>

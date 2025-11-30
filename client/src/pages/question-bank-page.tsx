@@ -135,11 +135,11 @@ export default function QuestionBankPage() {
           setMobileMenuOpen={setMobileMenuOpen} 
         />
         
-        <main className="flex-1 ml-0 md:ml-64 bg-gray-50 pt-16 min-h-screen">
+        <main className="flex-1 ml-0 md:ml-64 bg-background dark:bg-background pt-16 min-h-screen">
           <div className="p-4 md:p-6">
             <div className="mb-6">
-              <h1 className="text-2xl font-bold text-gray-900">Question Bank</h1>
-              <p className="text-gray-600">Browse the shared question bank (read-only)</p>
+              <h1 className="text-2xl font-bold text-foreground dark:text-primary">Question Bank</h1>
+              <p className="text-muted-foreground dark:text-sidebar-foreground/70">Browse the shared question bank (read-only)</p>
             </div>
             
             {/* Filters */}
@@ -149,7 +149,7 @@ export default function QuestionBankPage() {
                   <div>
                     <Label htmlFor="search">Search Questions</Label>
                     <div className="relative">
-                      <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground dark:text-sidebar-foreground/50" />
                       <Input
                         id="search"
                         placeholder="Search by content..."
@@ -232,11 +232,11 @@ export default function QuestionBankPage() {
                   </div>
                 ) : paginatedQuestions.length === 0 ? (
                   <div className="p-8 text-center">
-                    <div className="text-gray-500 mb-2">
-                      <Filter className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                    <div className="text-muted-foreground dark:text-sidebar-foreground/70 mb-2">
+                      <Filter className="h-12 w-12 mx-auto mb-4 opacity-40 dark:opacity-30" />
                     </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-1">No questions found</h3>
-                    <p className="text-gray-500">
+                    <h3 className="text-lg font-medium text-foreground dark:text-primary mb-1">No questions found</h3>
+                    <p className="text-muted-foreground dark:text-sidebar-foreground/70">
                       {Object.values(filters).some(f => f !== "") 
                         ? "Try adjusting your filters to see more questions."
                         : "No questions are currently available in the question bank."
@@ -263,12 +263,17 @@ export default function QuestionBankPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="secondary">OOP C++</Badge>
+                            <Badge 
+                              variant="outline"
+                              className="border-border/60 bg-muted/60 text-foreground dark:border-sidebar-border/50 dark:bg-muted/20"
+                            >
+                              OOP C++
+                            </Badge>
                           </TableCell>
                           <TableCell>
-                            <div className="text-sm">
+                            <div className="text-sm rounded-lg border border-border/60 dark:border-sidebar-border/50 bg-muted/60 dark:bg-muted/20 px-3 py-2">
                               <div className="font-medium">{question.subject}</div>
-                              <div className="text-gray-500">{question.gradeLevel}</div>
+                              <div className="text-muted-foreground dark:text-sidebar-foreground/70">{question.gradeLevel}</div>
                             </div>
                           </TableCell>
                           <TableCell>
@@ -348,7 +353,7 @@ export default function QuestionBankPage() {
 
             {/* Summary */}
             {questions && questions.length > 0 && (
-              <div className="mt-4 text-sm text-gray-600 text-center">
+              <div className="mt-4 text-sm text-muted-foreground dark:text-sidebar-foreground/70 text-center">
                 Showing {startIndex + 1} to {Math.min(endIndex, totalQuestions)} of {totalQuestions} questions
               </div>
             )}

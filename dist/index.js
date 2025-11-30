@@ -58,7 +58,7 @@ var questions = pgTable("questions", {
   gradeLevel: text("grade_level").notNull(),
   type: text("type").notNull(),
   // short_answer (BSCS focus)
-  content: text("content").notNull(),
+  content: text("content").notNull().unique(),
   answer: text("answer").notNull(),
   difficulty: text("difficulty").notNull(),
   // easy, medium, hard
@@ -76,6 +76,7 @@ var quizzes = pgTable("quizzes", {
   scheduledAt: timestamp("scheduled_at"),
   status: text("status").notNull().default("draft"),
   // draft, scheduled, active, completed
+  resultsPosted: boolean("results_posted").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow()
 });
 var quizQuestions = pgTable("quiz_questions", {
@@ -570,10 +571,6 @@ var Storage = class {
   async setGlobalQuizEndsAt(quizId, endsAt) {
     await db.update(studentQuizzes).set({ endsAt }).where(eq(studentQuizzes.quizId, quizId));
   }
-  // Quiz-related methods
-  async getQuizzesByTeacher(teacherId) {
-    return await db.select().from(quizzes).where(eq(quizzes.teacherId, teacherId)).orderBy(desc(quizzes.createdAt));
-  }
   async updateClass(id, classData) {
     const [updatedClass] = await db.update(classes).set(classData).where(eq(classes.id, id)).returning();
     return updatedClass;
@@ -584,10 +581,6 @@ var Storage = class {
   }
   async getClasses() {
     return await db.select().from(classes);
-  }
-  async getClass(id) {
-    const [classItem] = await db.select().from(classes).where(eq(classes.id, id));
-    return classItem;
   }
   async getClassesByTeacher(teacherId) {
     return await db.select().from(classes).where(eq(classes.teacherId, teacherId));
@@ -603,26 +596,6 @@ var Storage = class {
       return true;
     } catch (error) {
       console.error("Error adding student to class:", error);
-      return false;
-    }
-  }
-  async getClassStudents(classId) {
-    const result = await db.select({
-      user: users
-    }).from(classStudents).innerJoin(users, eq(classStudents.studentId, users.id)).where(eq(classStudents.classId, classId));
-    return result.map((r) => r.user);
-  }
-  // Quiz assignments
-  async assignQuizToStudent(quizId, studentId) {
-    try {
-      await db.insert(studentQuizzes).values({
-        quizId,
-        studentId,
-        status: "assigned"
-      });
-      return true;
-    } catch (error) {
-      console.error("Error assigning quiz to student:", error);
       return false;
     }
   }
@@ -723,99 +696,6 @@ var Storage = class {
   }
 };
 var storage = new Storage();
-async function initializeSampleData() {
-  try {
-    console.log("Initializing sample data...");
-    const sampleUsers = [
-      {
-        username: "teacher1",
-        email: "teacher1@example.com",
-        password: "password",
-        firstName: "John",
-        lastName: "Smith",
-        role: "teacher"
-      },
-      {
-        username: "student1",
-        email: "student1@example.com",
-        password: "password",
-        firstName: "Alice",
-        lastName: "Johnson",
-        role: "student"
-      },
-      {
-        username: "student2",
-        email: "student2@example.com",
-        password: "password",
-        firstName: "Bob",
-        lastName: "Wilson",
-        role: "student"
-      }
-    ];
-    for (const user of sampleUsers) {
-      try {
-        await db.insert(users).values(user).onConflictDoNothing();
-      } catch (error) {
-      }
-    }
-    const sampleQuestions = [
-      {
-        teacherId: 1,
-        content: "Explain the difference between encapsulation and abstraction in object-oriented programming.",
-        type: "short_answer",
-        answer: "Encapsulation is the practice of bundling data and methods that operate on that data within a single unit (class) and restricting access to some components. Abstraction is the concept of hiding complex implementation details while showing only essential features of an object.",
-        subject: "Object-Oriented Programming",
-        gradeLevel: "University",
-        difficulty: "Medium"
-      },
-      {
-        teacherId: 1,
-        content: "What is the time complexity of searching for an element in a balanced binary search tree?",
-        type: "short_answer",
-        answer: "O(log n) where n is the number of nodes in the tree.",
-        subject: "Data Structures & Algorithms",
-        gradeLevel: "University",
-        difficulty: "Easy"
-      },
-      {
-        teacherId: 1,
-        content: "Describe the purpose of the TCP three-way handshake in network communication.",
-        type: "short_answer",
-        answer: "The TCP three-way handshake establishes a reliable connection between client and server by exchanging SYN, SYN-ACK, and ACK packets to synchronize sequence numbers and ensure both parties are ready for data transmission.",
-        subject: "Computer Networks",
-        gradeLevel: "University",
-        difficulty: "Medium"
-      },
-      {
-        teacherId: 1,
-        content: "What is database normalization and why is it important?",
-        type: "short_answer",
-        answer: "Database normalization is the process of organizing data to reduce redundancy and improve data integrity. It's important because it eliminates data duplication, reduces storage space, and prevents update anomalies.",
-        subject: "Database Systems",
-        gradeLevel: "University",
-        difficulty: "Medium"
-      },
-      {
-        teacherId: 1,
-        content: "Explain the concept of version control in software development.",
-        type: "short_answer",
-        answer: "Version control is a system that tracks changes to files over time, allowing developers to collaborate, maintain history of changes, revert to previous versions, and manage different branches of development.",
-        subject: "Software Engineering",
-        gradeLevel: "University",
-        difficulty: "Easy"
-      }
-    ];
-    for (const question of sampleQuestions) {
-      try {
-        await db.insert(questions).values(question).onConflictDoNothing();
-      } catch (error) {
-      }
-    }
-    console.log("Sample data initialized successfully");
-  } catch (error) {
-    console.error("Error initializing sample data:", error);
-  }
-}
 
 // server/auth.ts
 import bcrypt from "bcryptjs";
@@ -1796,7 +1676,7 @@ async function registerRoutes(app2) {
       if (!questions2 || !Array.isArray(questions2) || questions2.length === 0) {
         return res.status(400).json({ message: "No questions provided" });
       }
-      const existingQuestions = await storage.getQuestionsByTeacher(1);
+      const existingQuestions = await storage.getQuestions();
       const savedQuestions = [];
       const duplicates = [];
       const uniqueSelectedQuestions = [];
@@ -1834,8 +1714,7 @@ async function registerRoutes(app2) {
             type: questionData.type,
             difficulty: questionData.difficulty,
             content: questionData.question,
-            answer: questionData.correctAnswer,
-            teacherId: 1
+            answer: questionData.correctAnswer
           });
           savedQuestions.push(question);
         } catch (err) {
@@ -2540,6 +2419,30 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Error retrieving quiz results" });
     }
   });
+  app2.get("/api/quizzes/:quizId/results-summary", ensureTeacher, async (req, res) => {
+    try {
+      const quizId = parseInt(req.params.quizId);
+      const quiz = await storage.getQuiz(quizId);
+      if (!quiz || quiz.teacherId !== req.user.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const attempts = await storage.getAttemptsWithUsersByQuiz(quizId);
+      const results = attempts.map((attempt) => {
+        return {
+          studentQuizId: attempt.id,
+          studentId: attempt.studentId,
+          studentName: attempt.student?.name || "Unknown",
+          studentEmail: attempt.student?.email || "",
+          score: attempt.score,
+          status: attempt.status
+        };
+      });
+      res.json(results);
+    } catch (error) {
+      console.error("Error getting results summary:", error);
+      res.status(500).json({ message: "Error retrieving results summary" });
+    }
+  });
   app2.post("/api/student-quizzes/:studentQuizId/grade", ensureTeacher, async (req, res) => {
     try {
       const studentQuizId = parseInt(req.params.studentQuizId);
@@ -2579,6 +2482,7 @@ async function registerRoutes(app2) {
           relatedId: quizId
         });
       }
+      await storage.updateQuiz(quizId, { resultsPosted: true });
       res.json({ message: "Results posted successfully", updatedAttempts: completedAttempts.length });
     } catch (error) {
       console.error("Error posting results:", error);
@@ -3415,7 +3319,7 @@ async function setupVite(app2, server) {
   });
 }
 function serveStatic(app2) {
-  const distPath = path2.resolve(__dirname2, "public");
+  const distPath = path2.resolve(__dirname2, "..", "dist", "public");
   if (!fs.existsSync(distPath)) {
     throw new Error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
@@ -3449,11 +3353,11 @@ async function createTables() {
   await db.execute(sql2`
     CREATE TABLE IF NOT EXISTS questions (
       id SERIAL PRIMARY KEY,
-      teacher_id INTEGER NOT NULL REFERENCES users(id),
       subject TEXT NOT NULL,
+      chapter TEXT,
       grade_level TEXT NOT NULL,
       type TEXT NOT NULL,
-      content TEXT NOT NULL,
+      content TEXT NOT NULL UNIQUE,
       answer TEXT NOT NULL,
       difficulty TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT NOW()
@@ -3572,6 +3476,10 @@ async function createTables() {
       created_at TIMESTAMP DEFAULT NOW()
     );
   `);
+  try {
+    await db.execute(sql2`ALTER TABLE questions ADD CONSTRAINT questions_content_unique UNIQUE (content);`);
+  } catch (e) {
+  }
   console.log("All tables created successfully!");
 }
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -3590,6 +3498,7 @@ import { spawn, exec } from "child_process";
 import fs2 from "fs";
 import path3 from "path";
 import os from "os";
+console.log("[startup] Creating express app");
 var app = express2();
 app.use(express2.json());
 app.use(express2.urlencoded({ extended: false }));
@@ -3617,319 +3526,328 @@ app.use((req, res, next) => {
   });
   next();
 });
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught Exception:", err);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+  process.exit(1);
+});
 (async () => {
   try {
-    await createTables();
-  } catch (e) {
-    console.error("Migration failed:", e);
-  }
-  await registerRoutes(app);
-  app.use((err, _req, res, _next) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-    res.status(status).json({ message });
-    throw err;
-  });
-  const server = createServer(app);
-  const wss = new WebSocketServer({ server, path: "/ws" });
-  const clients = /* @__PURE__ */ new Set();
-  function send(ws, msg) {
-    try {
-      ws.send(JSON.stringify(msg));
-    } catch {
-    }
-  }
-  function broadcast(filter, msg) {
-    for (const c of clients) {
-      if (filter(c)) send(c.ws, msg);
-    }
-  }
-  const consentMap = /* @__PURE__ */ new Map();
-  wss.on("connection", (ws, req) => {
-    const client3 = { ws, role: null, userId: null, quizId: null };
-    clients.add(client3);
-    try {
-      log(`WS connected from ${req.socket.remoteAddress}`);
-    } catch {
-    }
-    ws.on("message", (data) => {
-      let msg;
+    let send2 = function(ws, msg) {
       try {
-        msg = JSON.parse(String(data));
+        ws.send(JSON.stringify(msg));
       } catch {
+      }
+    }, broadcast2 = function(filter, msg) {
+      for (const c of clients) {
+        if (filter(c)) send2(c.ws, msg);
+      }
+    }, simulateCodeExecution2 = function(code, ws) {
+      const state = {
+        code,
+        step: 0,
+        inputs: [],
+        finished: false,
+        needsInput: code.includes("cin") || code.includes("scanf") || code.includes("getline"),
+        outputStatements: []
+      };
+      simulationStates.set(ws, state);
+      const hasIncludes = code.includes("#include");
+      const hasMain = code.includes("main");
+      if (!hasIncludes) {
+        ws.send(JSON.stringify({
+          type: "output",
+          data: "Compilation error: Missing #include statements\n"
+        }));
+        ws.send(JSON.stringify({ type: "finished" }));
         return;
       }
-      if (msg.type === "register") {
-        client3.role = msg.role;
-        client3.userId = msg.userId ?? null;
-        client3.quizId = msg.quizId ?? null;
-        try {
-          log(`WS register: role=${client3.role} user=${client3.userId} quiz=${client3.quizId}`);
-        } catch {
+      if (!hasMain) {
+        ws.send(JSON.stringify({
+          type: "output",
+          data: "Compilation error: Missing main() function\n"
+        }));
+        ws.send(JSON.stringify({ type: "finished" }));
+        return;
+      }
+      ws.send(JSON.stringify({ type: "output", data: "=== Compilation Successful ===\n" }));
+      ws.send(JSON.stringify({ type: "output", data: "=== Program Output ===\n" }));
+      const coutMatches = code.match(/cout\s*<<\s*[^;]+;/g);
+      if (coutMatches) {
+        state.outputStatements = coutMatches.map((match) => {
+          const stringMatch = match.match(/"([^"]+)"/);
+          return stringMatch ? stringMatch[1] : "cout << [expression]";
+        });
+      }
+      setTimeout(() => continueSimulation2(ws), 300);
+    }, continueSimulation2 = function(ws) {
+      const state = simulationStates.get(ws);
+      if (!state || state.finished) return;
+      if (state.step < state.outputStatements.length) {
+        const output = state.outputStatements[state.step];
+        ws.send(JSON.stringify({ type: "output", data: output + "\n" }));
+        state.step++;
+        if (state.needsInput && state.inputs.length === 0) {
+          setTimeout(() => {
+            ws.send(JSON.stringify({ type: "input_request", prompt: "Enter input: " }));
+          }, 200);
+        } else {
+          setTimeout(() => continueSimulation2(ws), 300);
         }
         return;
       }
-      if (msg.type === "request_webcam" && client3.role === "teacher") {
-        const { studentId, quizId } = msg;
-        try {
-          log(`WS request_webcam quiz=${quizId} student=${studentId} from teacher=${client3.userId}`);
-        } catch {
-        }
-        broadcast((c) => c.role === "student" && c.userId === studentId && c.quizId === quizId, {
-          type: "webcam_consent_request",
-          quizId,
-          teacherId: client3.userId
-        });
-        return;
-      }
-      if (msg.type === "webcam_consent" && client3.role === "student") {
-        const { quizId, teacherId, approved } = msg;
-        const key = `${quizId}:${client3.userId}`;
-        if (approved) consentMap.set(key, teacherId);
-        else consentMap.delete(key);
-        try {
-          log(`WS consent: quiz=${quizId} student=${client3.userId} -> teacher=${teacherId} approved=${approved}`);
-        } catch {
-        }
-        broadcast((c) => c.role === "teacher" && c.userId === teacherId, {
-          type: "webcam_consent_result",
-          quizId,
-          studentId: client3.userId,
-          approved
-        });
-        return;
-      }
-      if (msg.type === "frame" && client3.role === "student") {
-        const { quizId, dataUrl } = msg;
-        const key = `${quizId}:${client3.userId}`;
-        const approvedTeacherId = consentMap.get(key);
-        if (!approvedTeacherId) return;
-        broadcast((c) => c.role === "teacher" && c.userId === approvedTeacherId, {
-          type: "frame",
-          quizId,
-          studentId: client3.userId,
-          dataUrl,
-          ts: Date.now()
-        });
-        return;
-      }
-    });
-    ws.on("error", (e) => {
-      try {
-        log(`WS error: ${String(e)}`);
-      } catch {
-      }
-    });
-    ws.on("close", () => {
-      if (client3.role === "student" && client3.userId && client3.quizId) {
-        const key = `${client3.quizId}:${client3.userId}`;
-        consentMap.delete(key);
-      }
-      clients.delete(client3);
-      try {
-        log(`WS closed for role=${client3.role} user=${client3.userId}`);
-      } catch {
-      }
-    });
-  });
-  const simulationStates = /* @__PURE__ */ new WeakMap();
-  function simulateCodeExecution(code, ws) {
-    const state = {
-      code,
-      step: 0,
-      inputs: [],
-      finished: false,
-      needsInput: code.includes("cin") || code.includes("scanf") || code.includes("getline"),
-      outputStatements: []
-    };
-    simulationStates.set(ws, state);
-    const hasIncludes = code.includes("#include");
-    const hasMain = code.includes("main");
-    if (!hasIncludes) {
-      ws.send(JSON.stringify({
-        type: "output",
-        data: "Compilation error: Missing #include statements\n"
-      }));
-      ws.send(JSON.stringify({ type: "finished" }));
-      return;
-    }
-    if (!hasMain) {
-      ws.send(JSON.stringify({
-        type: "output",
-        data: "Compilation error: Missing main() function\n"
-      }));
-      ws.send(JSON.stringify({ type: "finished" }));
-      return;
-    }
-    ws.send(JSON.stringify({ type: "output", data: "=== Compilation Successful ===\n" }));
-    ws.send(JSON.stringify({ type: "output", data: "=== Program Output ===\n" }));
-    const coutMatches = code.match(/cout\s*<<\s*[^;]+;/g);
-    if (coutMatches) {
-      state.outputStatements = coutMatches.map((match) => {
-        const stringMatch = match.match(/"([^"]+)"/);
-        return stringMatch ? stringMatch[1] : "cout << [expression]";
-      });
-    }
-    setTimeout(() => continueSimulation(ws), 300);
-  }
-  function continueSimulation(ws) {
-    const state = simulationStates.get(ws);
-    if (!state || state.finished) return;
-    if (state.step < state.outputStatements.length) {
-      const output = state.outputStatements[state.step];
-      ws.send(JSON.stringify({ type: "output", data: output + "\n" }));
-      state.step++;
       if (state.needsInput && state.inputs.length === 0) {
-        setTimeout(() => {
-          ws.send(JSON.stringify({ type: "input_request", prompt: "Enter input: " }));
-        }, 200);
-      } else {
-        setTimeout(() => continueSimulation(ws), 300);
-      }
-      return;
-    }
-    if (state.needsInput && state.inputs.length === 0) {
-      ws.send(JSON.stringify({ type: "input_request", prompt: "Enter input: " }));
-      return;
-    }
-    state.finished = true;
-    ws.send(JSON.stringify({ type: "output", data: "\n=== Program finished with exit code 0 ===\n" }));
-    ws.send(JSON.stringify({ type: "finished" }));
-    simulationStates.delete(ws);
-  }
-  function handleSimulationInput(ws, inputData) {
-    const state = simulationStates.get(ws);
-    if (!state || state.finished) return false;
-    state.inputs.push(inputData);
-    ws.send(JSON.stringify({ type: "output", data: `Input received: ${inputData}
-` }));
-    setTimeout(() => continueSimulation(ws), 200);
-    return true;
-  }
-  const codeWss = new WebSocketServer({ server, path: "/ws/code" });
-  codeWss.on("connection", (ws) => {
-    console.log("\u{1F517} WebSocket client connected");
-    ws.send(JSON.stringify({ type: "connected", message: "Connected to code execution service" }));
-    let currentProcess = null;
-    let codeFile = "";
-    let exeFile = "";
-    let inputRequested = false;
-    const cleanup = () => {
-      if (currentProcess) {
-        currentProcess.kill();
-        currentProcess = null;
-      }
-      if (codeFile && fs2.existsSync(codeFile)) fs2.unlinkSync(codeFile);
-      if (exeFile && fs2.existsSync(exeFile)) fs2.unlinkSync(exeFile);
-      codeFile = "";
-      exeFile = "";
-      inputRequested = false;
-      simulationStates.delete(ws);
-    };
-    ws.on("message", (data) => {
-      let msg;
-      try {
-        msg = JSON.parse(String(data));
-      } catch {
+        ws.send(JSON.stringify({ type: "input_request", prompt: "Enter input: " }));
         return;
       }
-      if (msg.type === "run") {
-        cleanup();
-        const code = msg.code;
-        const tempDir = os.tmpdir();
-        codeFile = path3.join(tempDir, `code_${Date.now()}.cpp`);
-        exeFile = path3.join(tempDir, `exe_${Date.now()}`);
-        fs2.writeFileSync(codeFile, code);
-        exec(`g++ "${codeFile}" -o "${exeFile}"`, (error, stdout, stderr) => {
-          if (error) {
-            if (error.message.includes("'g++' is not recognized") || error.code === "ENOENT") {
-              ws.send(JSON.stringify({ type: "output", data: "C++ Compiler not found - Using simulation mode\n" }));
-              simulateCodeExecution(code, ws);
+      state.finished = true;
+      ws.send(JSON.stringify({ type: "output", data: "\n=== Program finished with exit code 0 ===\n" }));
+      ws.send(JSON.stringify({ type: "finished" }));
+      simulationStates.delete(ws);
+    }, handleSimulationInput2 = function(ws, inputData) {
+      const state = simulationStates.get(ws);
+      if (!state || state.finished) return false;
+      state.inputs.push(inputData);
+      ws.send(JSON.stringify({ type: "output", data: `Input received: ${inputData}
+` }));
+      setTimeout(() => continueSimulation2(ws), 200);
+      return true;
+    };
+    var send = send2, broadcast = broadcast2, simulateCodeExecution = simulateCodeExecution2, continueSimulation = continueSimulation2, handleSimulationInput = handleSimulationInput2;
+    console.log("[startup] Starting async initialization");
+    try {
+      await createTables();
+    } catch (e) {
+      console.error("Migration failed:", e);
+    }
+    console.log("[startup] Creating tables done, registering routes");
+    await registerRoutes(app);
+    console.log("[startup] Routes registered");
+    app.use((err, _req, res, _next) => {
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
+      res.status(status).json({ message });
+    });
+    const server = createServer(app);
+    const wss = new WebSocketServer({ server, path: "/ws" });
+    const clients = /* @__PURE__ */ new Set();
+    const consentMap = /* @__PURE__ */ new Map();
+    wss.on("connection", (ws, req) => {
+      const client3 = { ws, role: null, userId: null, quizId: null };
+      clients.add(client3);
+      try {
+        log(`WS connected from ${req.socket.remoteAddress}`);
+      } catch {
+      }
+      ws.on("message", (data) => {
+        let msg;
+        try {
+          msg = JSON.parse(String(data));
+        } catch {
+          return;
+        }
+        if (msg.type === "register") {
+          client3.role = msg.role;
+          client3.userId = msg.userId ?? null;
+          client3.quizId = msg.quizId ?? null;
+          try {
+            log(`WS register: role=${client3.role} user=${client3.userId} quiz=${client3.quizId}`);
+          } catch {
+          }
+          return;
+        }
+        if (msg.type === "request_webcam" && client3.role === "teacher") {
+          const { studentId, quizId } = msg;
+          try {
+            log(`WS request_webcam quiz=${quizId} student=${studentId} from teacher=${client3.userId}`);
+          } catch {
+          }
+          broadcast2((c) => c.role === "student" && c.userId === studentId && c.quizId === quizId, {
+            type: "webcam_consent_request",
+            quizId,
+            teacherId: client3.userId
+          });
+          return;
+        }
+        if (msg.type === "webcam_consent" && client3.role === "student") {
+          const { quizId, teacherId, approved } = msg;
+          const key = `${quizId}:${client3.userId}`;
+          if (approved) consentMap.set(key, teacherId);
+          else consentMap.delete(key);
+          try {
+            log(`WS consent: quiz=${quizId} student=${client3.userId} -> teacher=${teacherId} approved=${approved}`);
+          } catch {
+          }
+          broadcast2((c) => c.role === "teacher" && c.userId === teacherId, {
+            type: "webcam_consent_result",
+            quizId,
+            studentId: client3.userId,
+            approved
+          });
+          return;
+        }
+        if (msg.type === "frame" && client3.role === "student") {
+          const { quizId, dataUrl } = msg;
+          const key = `${quizId}:${client3.userId}`;
+          const approvedTeacherId = consentMap.get(key);
+          if (!approvedTeacherId) return;
+          broadcast2((c) => c.role === "teacher" && c.userId === approvedTeacherId, {
+            type: "frame",
+            quizId,
+            studentId: client3.userId,
+            dataUrl,
+            ts: Date.now()
+          });
+          return;
+        }
+      });
+      ws.on("error", (e) => {
+        try {
+          log(`WS error: ${String(e)}`);
+        } catch {
+        }
+      });
+      ws.on("close", () => {
+        if (client3.role === "student" && client3.userId && client3.quizId) {
+          const key = `${client3.quizId}:${client3.userId}`;
+          consentMap.delete(key);
+        }
+        clients.delete(client3);
+        try {
+          log(`WS closed for role=${client3.role} user=${client3.userId}`);
+        } catch {
+        }
+      });
+    });
+    const simulationStates = /* @__PURE__ */ new WeakMap();
+    const codeWss = new WebSocketServer({ server, path: "/ws/code" });
+    codeWss.on("connection", (ws) => {
+      console.log("\u{1F517} WebSocket client connected");
+      ws.send(JSON.stringify({ type: "connected", message: "Connected to code execution service" }));
+      let currentProcess = null;
+      let codeFile = "";
+      let exeFile = "";
+      let inputRequested = false;
+      const cleanup = () => {
+        if (currentProcess) {
+          currentProcess.kill();
+          currentProcess = null;
+        }
+        if (codeFile && fs2.existsSync(codeFile)) fs2.unlinkSync(codeFile);
+        if (exeFile && fs2.existsSync(exeFile)) fs2.unlinkSync(exeFile);
+        codeFile = "";
+        exeFile = "";
+        inputRequested = false;
+        simulationStates.delete(ws);
+      };
+      ws.on("message", (data) => {
+        let msg;
+        try {
+          msg = JSON.parse(String(data));
+        } catch {
+          return;
+        }
+        if (msg.type === "run") {
+          cleanup();
+          const code = msg.code;
+          const tempDir = os.tmpdir();
+          codeFile = path3.join(tempDir, `code_${Date.now()}.cpp`);
+          exeFile = path3.join(tempDir, `exe_${Date.now()}`);
+          fs2.writeFileSync(codeFile, code);
+          exec(`g++ "${codeFile}" -o "${exeFile}"`, (error, stdout, stderr) => {
+            if (error) {
+              if (error.message.includes("'g++' is not recognized") || error.code === "ENOENT") {
+                ws.send(JSON.stringify({ type: "output", data: "C++ Compiler not found - Using simulation mode\n" }));
+                simulateCodeExecution2(code, ws);
+                return;
+              }
+              ws.send(JSON.stringify({ type: "output", data: stderr || error.message }));
+              ws.send(JSON.stringify({ type: "finished" }));
               return;
             }
-            ws.send(JSON.stringify({ type: "output", data: stderr || error.message }));
-            ws.send(JSON.stringify({ type: "finished" }));
-            return;
-          }
-          currentProcess = spawn(exeFile, [], {
-            stdio: ["pipe", "pipe", "pipe"],
-            timeout: 3e4
-            // 30 second timeout
-          });
-          let lastOutputTime = Date.now();
-          let inputWaitTimer = null;
-          currentProcess.stdout.on("data", (data2) => {
-            const output = data2.toString();
-            ws.send(JSON.stringify({ type: "output", data: output }));
-            lastOutputTime = Date.now();
-            if (inputWaitTimer) {
-              clearTimeout(inputWaitTimer);
-              inputWaitTimer = null;
-            }
-            if (!inputRequested && (code.includes("cin") || code.includes("scanf") || code.includes("getline"))) {
-              inputWaitTimer = setTimeout(() => {
+            currentProcess = spawn(exeFile, [], { stdio: ["pipe", "pipe", "pipe"] });
+            inputRequested = false;
+            currentProcess.stdout.on("data", (data2) => {
+              const output = data2.toString();
+              ws.send(JSON.stringify({ type: "output", data: output }));
+              if (!inputRequested && (output.includes("Enter") || output.includes("Input") || output.includes(":") || output.endsWith("?"))) {
+                inputRequested = true;
+                setTimeout(() => {
+                  if (currentProcess && !currentProcess.killed) {
+                    ws.send(JSON.stringify({ type: "input_request", prompt: "> " }));
+                  }
+                }, 100);
+              }
+            });
+            currentProcess.stderr.on("data", (data2) => {
+              ws.send(JSON.stringify({ type: "output", data: data2.toString() }));
+            });
+            currentProcess.on("close", (code2) => {
+              ws.send(JSON.stringify({ type: "output", data: `
+Program finished with exit code ${code2}
+` }));
+              ws.send(JSON.stringify({ type: "finished" }));
+              cleanup();
+            });
+            if (code.includes("cin") || code.includes("scanf") || code.includes("getline")) {
+              setTimeout(() => {
                 if (currentProcess && !currentProcess.killed && !inputRequested) {
                   inputRequested = true;
                   ws.send(JSON.stringify({ type: "input_request", prompt: "> " }));
                 }
-              }, 200);
+              }, 500);
             }
           });
-          currentProcess.stderr.on("data", (data2) => {
-            ws.send(JSON.stringify({ type: "output", data: data2.toString() }));
-          });
-          currentProcess.on("close", (code2) => {
-            if (inputWaitTimer) clearTimeout(inputWaitTimer);
-            ws.send(JSON.stringify({ type: "output", data: `
-Program finished with exit code ${code2}
-` }));
-            ws.send(JSON.stringify({ type: "finished" }));
-            cleanup();
-          });
-          if (code.includes("cin") || code.includes("scanf") || code.includes("getline")) {
-            setTimeout(() => {
-              if (currentProcess && !currentProcess.killed && !inputRequested) {
-                inputRequested = true;
-                ws.send(JSON.stringify({ type: "input_request", prompt: "> " }));
-              }
-            }, 300);
+        } else if (msg.type === "input") {
+          if (handleSimulationInput2(ws, msg.data)) {
+            return;
           }
-        });
-      } else if (msg.type === "input") {
-        if (handleSimulationInput(ws, msg.data)) {
-          return;
+          if (currentProcess && !currentProcess.killed) {
+            currentProcess.stdin.write(msg.data + "\n");
+            inputRequested = false;
+          }
+        } else if (msg.type === "stop") {
+          cleanup();
+          ws.send(JSON.stringify({ type: "output", data: "\nExecution stopped\n" }));
+          ws.send(JSON.stringify({ type: "finished" }));
         }
-        if (currentProcess && !currentProcess.killed) {
-          currentProcess.stdin.write(msg.data + "\n");
-          inputRequested = false;
-        }
-      } else if (msg.type === "stop") {
+      });
+      ws.on("close", () => {
         cleanup();
-        ws.send(JSON.stringify({ type: "output", data: "\nExecution stopped\n" }));
-        ws.send(JSON.stringify({ type: "finished" }));
-      }
+      });
+      ws.on("error", () => {
+        cleanup();
+      });
     });
-    ws.on("close", () => {
-      cleanup();
-    });
-    ws.on("error", () => {
-      cleanup();
-    });
-  });
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
-  }
-  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 5e3;
-  const host = (process.env.HOST || "").trim() || void 0;
-  server.listen(port, host, async () => {
-    const shownHost = host ?? "0.0.0.0";
-    log(`serving on http://${shownHost}:${port}`);
-    try {
-      await initializeSampleData();
-    } catch (e) {
-      console.error(e);
+    console.log("[startup] Setting up vite/static. ENV:", app.get("env"));
+    if (app.get("env") === "development") {
+      await setupVite(app, server);
+    } else {
+      serveStatic(app);
     }
-  });
-})();
+    console.log("[startup] Vite/static setup complete");
+    const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 5e3;
+    const host = (process.env.HOST || "").trim() || void 0;
+    console.log("[startup] About to start server on port:", port, "host:", host);
+    await new Promise((resolve, reject) => {
+      server.listen(port, host, () => {
+        const shownHost = host ?? "0.0.0.0";
+        log(`serving on http://${shownHost}:${port}`);
+        console.log("[startup] Server is now listening");
+        resolve();
+      }).on("error", (err) => {
+        console.error("[startup] Server error:", err);
+        reject(err);
+      });
+    });
+  } catch (err) {
+    console.error("[startup] Fatal error during startup:", err);
+    process.exit(1);
+  }
+})().catch((err) => {
+  console.error("[startup] IIFE Promise rejection:", err);
+  process.exit(1);
+});

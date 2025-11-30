@@ -305,33 +305,33 @@ export default function PracticeQuizPage() {
   };
 
   return (
-    <div className="min-h-screen py-8 px-4">
+    <div className="min-h-screen bg-background dark:bg-background py-8 px-4 text-foreground">
       <div className="container mx-auto max-w-6xl">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-center bg-gradient-to-r from-cyan-600 to-cyan-500 bg-clip-text text-transparent">Practice Quiz</h1>
-          <p className="text-center text-cyan-700 mt-2">Improve your skills with AI-powered practice quizzes</p>
+        <div className="mb-8 text-center">
+          <h1 className="text-4xl font-bold text-foreground dark:text-primary">Practice Quiz</h1>
+          <p className="text-muted-foreground dark:text-sidebar-foreground/70 mt-2">Improve your skills with AI-powered practice quizzes</p>
         </div>
         
         <Tabs value={currentTab} onValueChange={setCurrentTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 bg-white/80 backdrop-blur-sm p-1.5 rounded-xl shadow-md border border-cyan-200">
+          <TabsList className="grid w-full grid-cols-3 bg-card dark:bg-card border border-border/70 dark:border-sidebar-border p-1.5 rounded-xl shadow-md">
             <TabsTrigger 
               value="select" 
               disabled={currentTab === "quiz" || currentTab === "results"}
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-cyan-600 data-[state=active]:text-white data-[state=active]:shadow-lg rounded-lg transition-all duration-200"
+              className="rounded-lg transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg"
             >
               Select Chapter
             </TabsTrigger>
             <TabsTrigger 
               value="quiz" 
               disabled={!practiceSession || currentTab === "results"}
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-cyan-600 data-[state=active]:text-white data-[state=active]:shadow-lg rounded-lg transition-all duration-200"
+              className="rounded-lg transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg"
             >
               Take Quiz
             </TabsTrigger>
             <TabsTrigger 
               value="results" 
               disabled={!quizResults}
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-cyan-600 data-[state=active]:text-white data-[state=active]:shadow-lg rounded-lg transition-all duration-200"
+              className="rounded-lg transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg"
             >
               Results
             </TabsTrigger>
@@ -341,48 +341,48 @@ export default function PracticeQuizPage() {
           <TabsContent value="select">
             <div className="space-y-6 max-w-3xl mx-auto">
               {hasResumeOption && (
-                <Card className="border-amber-300 shadow-xl bg-amber-50/90 backdrop-blur-sm hover-lift">
-                  <CardHeader className="bg-gradient-to-br from-amber-50 via-white to-amber-50 border-b border-amber-200">
-                    <CardTitle className="text-xl font-bold text-amber-900 flex items-center gap-2">
-                      <BookOpen className="h-5 w-5 text-amber-600" />
+                <Card className="border border-border/70 dark:border-sidebar-border bg-card dark:bg-card shadow-xl">
+                  <CardHeader className="border-b border-border/60 dark:border-sidebar-border">
+                    <CardTitle className="text-xl font-bold text-foreground dark:text-primary flex items-center gap-2">
+                      <BookOpen className="h-5 w-5 text-primary" />
                       Resume Previous Practice Quiz?
                     </CardTitle>
-                    <CardDescription className="text-amber-700">
+                    <CardDescription className="text-muted-foreground dark:text-sidebar-foreground/70">
                       You have an unfinished practice quiz. Click below to continue where you left off.
                     </CardDescription>
                   </CardHeader>
                   <CardFooter className="px-6 py-4 gap-2">
                     <Button 
                       onClick={handleResumePractice}
-                      className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-semibold"
+                      variant="default"
+                      className="font-semibold shadow-md"
                     >
                       Resume Practice Quiz
                     </Button>
                     <Button 
                       onClick={handleNewPractice}
                       variant="outline"
-                      className="border-amber-300 hover:bg-amber-50"
                     >
                       Start New Quiz
                     </Button>
                   </CardFooter>
                 </Card>
               )}
-              <Card className="border-cyan-200 shadow-xl bg-white/90 backdrop-blur-sm hover-lift">
-                <CardHeader className="bg-gradient-to-br from-cyan-50 via-white to-cyan-50 border-b border-cyan-100">
-                  <CardTitle className="text-2xl font-bold text-cyan-900 flex items-center gap-2">
-                    <BookOpen className="h-6 w-6 text-cyan-600" />
+              <Card className="border border-border/70 dark:border-sidebar-border bg-card dark:bg-card shadow-xl">
+                <CardHeader className="border-b border-border/60 dark:border-sidebar-border">
+                  <CardTitle className="text-2xl font-bold text-foreground dark:text-primary flex items-center gap-2">
+                    <BookOpen className="h-6 w-6 text-primary" />
                     Create Practice Quiz
                   </CardTitle>
-                  <CardDescription className="text-cyan-700">
+                  <CardDescription className="text-muted-foreground dark:text-sidebar-foreground/70">
                     Select a chapter and the number of questions for your practice quiz.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6 p-6">
                   <div className="space-y-3">
-                    <Label htmlFor="chapter" className="text-sm font-semibold text-cyan-900">Chapter</Label>
+                    <Label htmlFor="chapter" className="text-sm font-semibold text-foreground dark:text-primary">Chapter</Label>
                     <Select value={selectedChapter} onValueChange={setSelectedChapter}>
-                      <SelectTrigger id="chapter" className="bg-cyan-50 border-cyan-300 hover:bg-cyan-100 hover:border-cyan-400 transition-all duration-200 h-12 text-base shadow-sm">
+                      <SelectTrigger id="chapter" className="h-12 text-base">
                         <SelectValue placeholder="Select a chapter" />
                       </SelectTrigger>
                     <SelectContent>
@@ -402,9 +402,9 @@ export default function PracticeQuizPage() {
                 </div>
                 
                   <div className="space-y-3">
-                    <Label htmlFor="questionCount" className="text-sm font-semibold text-cyan-900">Number of Questions</Label>
+                    <Label htmlFor="questionCount" className="text-sm font-semibold text-foreground dark:text-primary">Number of Questions</Label>
                     <Select value={questionCount} onValueChange={setQuestionCount}>
-                      <SelectTrigger id="questionCount" className="bg-cyan-50 border-cyan-300 hover:bg-cyan-100 hover:border-cyan-400 transition-all duration-200 h-12 text-base shadow-sm">
+                      <SelectTrigger id="questionCount" className="h-12 text-base">
                         <SelectValue placeholder="5 questions" />
                       </SelectTrigger>
                     <SelectContent>
@@ -421,7 +421,8 @@ export default function PracticeQuizPage() {
                   <Button 
                     onClick={handleStartPractice} 
                     disabled={!selectedChapter || generateQuizMutation.isPending}
-                    className="w-full bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white font-semibold py-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 text-base"
+                    variant="default"
+                    className="w-full py-6 rounded-lg text-base font-semibold shadow-lg"
                   >
                     {generateQuizMutation.isPending ? "Generating..." : "Start Practice Quiz"}
                   </Button>
@@ -429,13 +430,13 @@ export default function PracticeQuizPage() {
               </Card>
             
               {/* Practice Quiz History */}
-              <Card className="border-cyan-200 shadow-xl bg-white/90 backdrop-blur-sm hover-lift">
-                <CardHeader className="bg-gradient-to-br from-cyan-50 via-white to-cyan-50 border-b border-cyan-100">
-                  <CardTitle className="text-2xl font-bold text-cyan-900 flex items-center gap-2">
-                    <BarChart2 className="h-6 w-6 text-cyan-600" />
+              <Card className="border border-border/70 dark:border-sidebar-border bg-card dark:bg-card shadow-xl">
+                <CardHeader className="border-b border-border/60 dark:border-sidebar-border">
+                  <CardTitle className="text-2xl font-bold text-foreground dark:text-primary flex items-center gap-2">
+                    <BarChart2 className="h-6 w-6 text-primary" />
                     Your Practice Quiz History
                   </CardTitle>
-                  <CardDescription className="text-cyan-700">
+                  <CardDescription className="text-muted-foreground dark:text-sidebar-foreground/70">
                     Review your previous practice quizzes and scores.
                   </CardDescription>
                 </CardHeader>
@@ -454,7 +455,7 @@ export default function PracticeQuizPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="rounded-md border">
+                    <div className="rounded-md border border-border/70 dark:border-sidebar-border">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -497,17 +498,17 @@ export default function PracticeQuizPage() {
           <TabsContent value="quiz">
             {practiceSession && (
               <div className="space-y-6">
-                <Card className="border-cyan-200 shadow-xl bg-white/90 backdrop-blur-sm">
-                  <CardHeader className="bg-gradient-to-br from-cyan-50 via-white to-cyan-50 border-b border-cyan-100">
+                <Card className="border border-border/70 dark:border-sidebar-border bg-card dark:bg-card shadow-xl">
+                  <CardHeader className="border-b border-border/60 dark:border-sidebar-border">
                     <div className="flex justify-between items-center">
-                      <CardTitle className="text-2xl font-bold text-cyan-900">
+                      <CardTitle className="text-2xl font-bold text-foreground dark:text-primary">
                         Practice Quiz: {practiceSession.subject}
                       </CardTitle>
                     <div className="text-sm text-muted-foreground">
                       {currentQuestionIndex + 1} of {practiceSession.questions.length}
                     </div>
                   </div>
-                  <CardDescription>
+                  <CardDescription className="text-muted-foreground dark:text-sidebar-foreground/70">
                     Answer each question to the best of your ability.
                   </CardDescription>
                   <Progress value={getCompletionPercentage()} className="h-2" />
@@ -621,15 +622,15 @@ export default function PracticeQuizPage() {
                         )}
                         
                         {/* Help text for practice quiz */}
-                        <div className="text-xs text-muted-foreground bg-green-50 p-3 rounded-lg">
+                        <div className="text-xs text-muted-foreground bg-accent/40 dark:bg-sidebar-background/40 border border-border/40 dark:border-sidebar-border/50 p-3 rounded-lg">
                           <div className="flex items-start gap-2">
-                            <div className="flex-shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-1.5"></div>
+                            <div className="flex-shrink-0 w-2 h-2 bg-primary rounded-full mt-1.5"></div>
                             <div>
                               <strong>Practice Mode:</strong> Use any editor type to practice and improve your skills
                             </div>
                           </div>
                           <div className="flex items-start gap-2 mt-1">
-                            <div className="flex-shrink-0 w-2 h-2 bg-green-500 rounded-full mt-1.5"></div>
+                            <div className="flex-shrink-0 w-2 h-2 bg-emerald-400 rounded-full mt-1.5"></div>
                             <div>
                               <strong>AI Feedback:</strong> You'll receive detailed feedback on both text and code answers
                             </div>
@@ -639,7 +640,7 @@ export default function PracticeQuizPage() {
                     </div>
                   )}
                 </CardContent>
-                <CardFooter className="flex justify-between">
+                <CardFooter className="flex justify-between items-center border-t border-border/60 dark:border-sidebar-border pt-4">
                   <div>
                     <Button
                       variant="outline"
@@ -651,11 +652,13 @@ export default function PracticeQuizPage() {
                   </div>
                   <div className="flex gap-2">
                     {currentQuestionIndex < practiceSession.questions.length - 1 ? (
-                      <Button onClick={handleNextQuestion}>
+                      <Button variant="default" className="shadow-md" onClick={handleNextQuestion}>
                         Next
                       </Button>
                     ) : (
                       <Button 
+                        variant="default"
+                        className="shadow-md"
                         onClick={handleSubmitQuiz}
                         disabled={submitQuizMutation.isPending}
                       >
@@ -686,24 +689,24 @@ export default function PracticeQuizPage() {
           <TabsContent value="results">
             {quizResults && (
               <div className="space-y-6">
-                <Card className="border-cyan-200 shadow-xl bg-white/90 backdrop-blur-sm">
-                  <CardHeader className="bg-gradient-to-br from-cyan-50 via-white to-cyan-50 border-b border-cyan-100">
+                <Card className="border border-border/70 dark:border-sidebar-border bg-card dark:bg-card shadow-xl">
+                  <CardHeader className="border-b border-border/60 dark:border-sidebar-border">
                     <div className="flex justify-between items-center">
-                      <CardTitle className="text-2xl font-bold text-cyan-900">Quiz Results</CardTitle>
-                    <div className="text-2xl font-bold">
+                      <CardTitle className="text-2xl font-bold text-foreground dark:text-primary">Quiz Results</CardTitle>
+                    <div className="text-2xl font-bold text-foreground dark:text-primary">
                       Score: {quizResults.averageScore}%
                     </div>
                   </div>
-                  <CardDescription>
+                  <CardDescription className="text-muted-foreground dark:text-sidebar-foreground/70">
                     Review your results and feedback for each question.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-8">
                     {quizResults.results.map((result: any, index: number) => (
-                      <div key={result.questionId} className="border rounded-lg p-4 space-y-4">
+                      <div key={result.questionId} className="border border-border/70 dark:border-sidebar-border rounded-lg p-4 space-y-4">
                         <div className="flex items-start gap-3">
-                          <div className={`rounded-full p-1 ${result.score >= 70 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                          <div className={`rounded-full p-1 ${result.score >= 70 ? "bg-emerald-500/15 text-emerald-500 dark:text-emerald-300 dark:bg-emerald-500/20" : "bg-red-500/15 text-red-500 dark:text-red-300 dark:bg-red-500/20"}`}>
                             {result.score >= 70 ? (
                               <CheckIcon className="h-5 w-5" />
                             ) : (
@@ -732,8 +735,8 @@ export default function PracticeQuizPage() {
                     ))}
                   </div>
                 </CardContent>
-                <CardFooter className="flex justify-between">
-                  <Button onClick={handleNewPractice}>Start New Practice Quiz</Button>
+                <CardFooter className="flex justify-between items-center border-t border-border/60 dark:border-sidebar-border pt-4">
+                  <Button variant="default" className="shadow-md" onClick={handleNewPractice}>Start New Practice Quiz</Button>
                   <Link href="/dashboard">
                     <Button variant="outline">Return to Dashboard</Button>
                   </Link>

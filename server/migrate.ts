@@ -18,6 +18,7 @@ async function createTables() {
       created_at TIMESTAMP DEFAULT NOW()
     );
   `);
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;`);
 
   // Create questions table
   await db.execute(sql`

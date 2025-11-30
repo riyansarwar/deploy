@@ -168,15 +168,10 @@ export async function registerRoutes(app: Express): Promise<void> {
   // Profile update route
   app.patch("/api/user/profile", authenticateToken, ensureAuthenticated, async (req, res) => {
     try {
-      //if (!req.user) {
-      //  return res.status(401).json({ message: "User not authenticated" });
-      //}
-
-      //const userId = req.user.id;
-      const { firstName, lastName, email, phone } = req.body;
+      const { firstName, lastName, phone } = req.body;
 
       // Persist to DB and return updated user (without password)
-      const updated = await storage.updateUserProfile(req.user!.id, { firstName, lastName, email });
+      const updated = await storage.updateUserProfile(req.user!.id, { firstName, lastName });
       const { password, ...userWithoutPassword } = updated as any;
       res.json(userWithoutPassword);
     } catch (error) {
@@ -184,33 +179,7 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  // Password update route
-  app.post("/api/user/password", authenticateToken, ensureAuthenticated, async (req: AuthRequest, res) => {
-    try {
-      const { currentPassword, newPassword } = req.body;
 
-      if (!currentPassword || !newPassword) {
-        return res.status(400).json({ message: "Current and new password are required" });
-      }
-
-      // Verify current password
-      const user = req.user!;
-      const isValid = await (await import("bcryptjs")).default.compare(currentPassword, user.password);
-      if (!isValid) {
-        return res.status(400).json({ message: "Current password is incorrect" });
-      }
-
-      // Hash and update new password
-      const bcrypt = (await import("bcryptjs")).default;
-      const hash = await bcrypt.hash(newPassword, 10);
-      await storage.updateUserPassword(user.id, hash);
-
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Password update error:", error);
-      res.status(500).json({ message: "Failed to update password" });
-    }
-  });
 
   // Get classes for the current user based on role
   app.get("/api/classes/teacher", ensureTeacher, async (req, res) => {
@@ -249,7 +218,17 @@ export async function registerRoutes(app: Express): Promise<void> {
         return res.json([]);
       }
 
-      res.json(allClasses);
+      // For each class, get the count of students
+      const classesWithStudents = await Promise.all(allClasses.map(async (classItem) => {
+        const students = await storage.getClassStudents(classItem.id);
+        return {
+          ...classItem,
+          studentCount: students.length,
+          students // Include the actual student data
+        };
+      }));
+
+      res.json(classesWithStudents);
     } catch (error) {
       console.error("Error getting student classes:", error);
       res.status(500).json({ message: "Error retrieving enrolled classes" });
@@ -1339,8 +1318,10 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
       // Get all student attempts for this quiz
       const attempts = await storage.getAttemptsWithUsersByQuiz(quizId);
 
-      // Filter to only completed attempts
-      const completedAttempts = attempts.filter(a => a.status === "completed");
+      // Filter to only completed attempts and sort by score (highest first)
+      const completedAttempts = attempts
+        .filter(a => a.status === "completed")
+        .sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
 
       res.json(completedAttempts);
     } catch (error) {
@@ -1500,7 +1481,7 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
           score: attempt.score,
           status: attempt.status
         };
-      });
+      }).sort((a: any, b: any) => (b.score ?? -1) - (a.score ?? -1));
 
       res.json(results);
     } catch (error) {

@@ -759,15 +759,17 @@ export default function TakeQuizPage() {
               )}
               {/* Streaming badge */}
               {streaming && (
-                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-100 text-green-700">
-                  <span className="inline-block w-2 h-2 rounded-full bg-green-600 animate-pulse" />
+                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 dark:bg-emerald-300 animate-pulse" />
                   Webcam On
-                  <span className="text-xs text-green-700/80">({framesSent})</span>
+                  <span className="text-xs text-emerald-600/80 dark:text-emerald-200/80">({framesSent})</span>
                 </div>
               )}
               {timeRemaining !== null && (
                 <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${
-                  timeRemaining < 300 ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                  timeRemaining < 300 
+                    ? 'bg-red-500/15 text-destructive dark:text-red-300 dark:bg-red-500/20'
+                    : 'bg-primary/15 text-primary dark:bg-primary/20'
                 }`}>
                   <Timer className="h-4 w-4" />
                   <span className="font-mono font-medium">
@@ -791,10 +793,10 @@ export default function TakeQuizPage() {
                 variant={index === currentQuestionIndex ? "default" : "outline"}
                 size="sm"
                 onClick={() => goToQuestion(index)}
-                className={`w-10 h-10 ${
+                className={`w-10 h-10 border ${
                   answers[questions[index].id] || codeAnswers[questions[index].id] 
-                    ? 'bg-green-100 border-green-300' 
-                    : ''
+                    ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 dark:bg-emerald-500/20' 
+                    : 'border-border/60 dark:border-sidebar-border/60'
                 }`}
               >
                 {index + 1}
@@ -908,15 +910,15 @@ export default function TakeQuizPage() {
             )}
             
             {/* Help text */}
-            <div className="text-xs text-muted-foreground bg-blue-50 p-3 rounded-lg">
+            <div className="text-xs text-muted-foreground bg-accent/40 dark:bg-sidebar-background/40 border border-border/40 dark:border-sidebar-border/50 p-3 rounded-lg">
               <div className="flex items-start gap-2">
-                <div className="flex-shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-1.5"></div>
+                <div className="flex-shrink-0 w-2 h-2 bg-primary rounded-full mt-1.5"></div>
                 <div>
                   <strong>Text Editor:</strong> For explanations, essays, short answers, and general responses
                 </div>
               </div>
               <div className="flex items-start gap-2 mt-1">
-                <div className="flex-shrink-0 w-2 h-2 bg-green-500 rounded-full mt-1.5"></div>
+                <div className="flex-shrink-0 w-2 h-2 bg-emerald-400 rounded-full mt-1.5"></div>
                 <div>
                   <strong>Code Editor:</strong> Professional IDE with C++ compilation, external compiler access, and syntax highlighting
                 </div>

@@ -184,12 +184,12 @@ export default function GradingPage() {
   };
 
   const getGradeColor = (score: number | null) => {
-    if (score === null) return "bg-gray-100 text-gray-800";
-    if (score >= 90) return "bg-green-100 text-green-800";
-    if (score >= 80) return "bg-blue-100 text-blue-800";
-    if (score >= 70) return "bg-yellow-100 text-yellow-800";
-    if (score >= 60) return "bg-orange-100 text-orange-800";
-    return "bg-red-100 text-red-800";
+    if (score === null) return "bg-muted text-foreground dark:bg-sidebar-accent dark:text-foreground";
+    if (score >= 90) return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+    if (score >= 80) return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+    if (score >= 70) return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300";
+    if (score >= 60) return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
+    return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
   };
 
   if (gradingLoading) {
@@ -336,7 +336,7 @@ export default function GradingPage() {
                             {answer.answer && (
                               <div className="mb-4">
                                 <h5 className="font-medium mb-2">Student's Text Answer:</h5>
-                                <div className="bg-gray-50 p-3 rounded-lg whitespace-pre-wrap border">
+                                <div className="bg-muted dark:bg-sidebar-accent p-3 rounded-lg whitespace-pre-wrap border dark:border-sidebar-border">
                                   {answer.answer}
                                 </div>
                               </div>

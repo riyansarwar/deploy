@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -20,8 +20,11 @@ import QuizMonitorPage from "@/pages/quiz-monitor-page";
 import GradingPage from "@/pages/grading-page";
 import StudentResultsPage from "@/pages/student-results-page";
 import QuizResultsSummaryPage from "@/pages/quiz-results-summary-page";
+import VerifyEmailPage from "@/pages/verify-email-page";
+import ResetPasswordPage from "@/pages/reset-password-page";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ProfessionalCppIde } from "@/components/ui/professional-cpp-ide";
+import { ThemeProvider } from "@/hooks/use-theme";
 
 // Simple IDE Page Component
 function IdePage() {
@@ -36,6 +39,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/auth" component={AuthPage} />
+      <Route path="/verify-email" component={VerifyEmailPage} />
+      <Route path="/reset-password" component={ResetPasswordPage} />
       <Route path="/ide" component={IdePage} exact />
       {/* Put more specific routes before generic ones and use exact where appropriate */}
       <ProtectedRoute path="/quizzes/:quizId/grade" component={GradingPage} exact />
@@ -58,15 +63,20 @@ function Router() {
 }
 
 function App() {
+  const [location] = useLocation();
+  const forceLight = Boolean(location && (location.startsWith("/auth") || location.startsWith("/verify-email") || location.startsWith("/reset-password")));
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <ErrorBoundary>
-          <Router />
-        </ErrorBoundary>
-        <Toaster />
-      </AuthProvider>
-    </QueryClientProvider>
+    <ThemeProvider forceLight={forceLight}>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <ErrorBoundary>
+            <Router />
+          </ErrorBoundary>
+          <Toaster />
+        </AuthProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }
 

@@ -82,7 +82,7 @@ export default function RecentActivity() {
 
   return (
     <Card>
-      <CardHeader className="px-5 py-4 border-b border-gray-200">
+      <CardHeader className="px-5 py-4 border-b border-border dark:border-sidebar-border">
         <CardTitle className="font-semibold text-lg">Recent Activity</CardTitle>
       </CardHeader>
       <CardContent className="p-5">
@@ -101,7 +101,7 @@ export default function RecentActivity() {
           </div>
         ) : activities && activities.length > 0 ? (
           <div className="relative">
-            <div className="border-l-2 border-gray-200 ml-3 pb-1">
+            <div className="border-l-2 border-border dark:border-sidebar-border ml-3 pb-1">
               {activities.map((activity, index) => {
                 const { bg, text } = getActivityColors(activity.type);
                 return (
@@ -129,10 +129,10 @@ export default function RecentActivity() {
                     <div className={`absolute -left-3.5 mt-1 w-6 h-6 rounded-full ${bg} flex items-center justify-center`}>
                       {getActivityIcon(activity.type)}
                     </div>
-                    <div className="ml-6 hover:bg-gray-50 px-3 py-2 rounded-md transition-colors w-full">
+                    <div className="ml-6 hover:bg-accent dark:hover:bg-sidebar-accent px-3 py-2 rounded-md transition-colors w-full">
                       <p className="font-medium">{activity.title}</p>
-                      <p className="text-sm text-gray-500">{activity.description}</p>
-                      <p className="text-xs text-gray-400 mt-1">{formatTimestamp(activity.timestamp)}</p>
+                      <p className="text-sm text-muted-foreground dark:text-sidebar-foreground/70">{activity.description}</p>
+                      <p className="text-xs text-muted-foreground dark:text-sidebar-foreground/60 mt-1">{formatTimestamp(activity.timestamp)}</p>
                     </div>
                   </div>
                 );
@@ -140,8 +140,8 @@ export default function RecentActivity() {
             </div>
           </div>
         ) : (
-          <div className="text-center py-6">
-            <p className="text-gray-500">No recent activity found</p>
+          <div className="text-center py-8 rounded-xl border border-border/70 dark:border-sidebar-border/60 bg-muted/60 dark:bg-muted/20">
+            <p className="text-muted-foreground dark:text-sidebar-foreground/70">No recent activity found</p>
           </div>
         )}
       </CardContent>

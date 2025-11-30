@@ -293,12 +293,12 @@ export default function StudentsPage() {
           setMobileMenuOpen={setMobileMenuOpen} 
         />
         
-        <main className="flex-1 ml-0 md:ml-64 bg-gray-50 pt-16 min-h-screen">
+        <main className="flex-1 ml-0 md:ml-64 bg-background dark:bg-background pt-16 min-h-screen">
           <div className="p-4 md:p-6">
             <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Students Management</h1>
-                <p className="text-gray-600">View and manage your students and their performance</p>
+                <h1 className="text-2xl font-bold text-foreground dark:text-primary">Students Management</h1>
+                <p className="text-muted-foreground dark:text-sidebar-foreground/70">View and manage your students and their performance</p>
               </div>
             </div>
             
@@ -314,7 +314,7 @@ export default function StudentsPage() {
                   <CardContent className="p-4">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div>
-                        <Label className="block text-sm font-medium text-gray-700 mb-1">Class</Label>
+                        <Label className="block text-sm font-medium text-foreground dark:text-sidebar-foreground mb-1">Class</Label>
                         <Select onValueChange={(value) => handleFilterChange('class', value)} value={filters.class}>
                           <SelectTrigger>
                             <SelectValue placeholder="All Classes" />
@@ -370,7 +370,7 @@ export default function StudentsPage() {
                             className="pl-10"
                           />
                           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <SearchIcon className="h-4 w-4 text-gray-400" />
+                            <SearchIcon className="h-4 w-4 text-muted-foreground dark:text-sidebar-foreground/50" />
                           </div>
                         </div>
                       </div>
@@ -379,7 +379,7 @@ export default function StudentsPage() {
                 </Card>
                 
                 {/* Students List */}
-                <div className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="bg-card dark:bg-card rounded-lg shadow dark:shadow-md overflow-hidden">
                   {isLoading ? (
                     <div className="p-6 space-y-6">
                       {[1, 2, 3, 4, 5].map((i) => (

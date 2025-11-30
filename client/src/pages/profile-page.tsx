@@ -49,7 +49,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { User, Edit, Key, UserPlus, Book, Mail, Phone } from "lucide-react";
+import { User, Edit, Key, UserPlus, Book, Mail, Phone, Eye, EyeOff } from "lucide-react";
 
 // Password change schema
 const passwordSchema = z.object({
@@ -65,7 +65,6 @@ const passwordSchema = z.object({
 const profileSchema = z.object({
   firstName: z.string().min(1, { message: "First name is required" }),
   lastName: z.string().min(1, { message: "Last name is required" }),
-  email: z.string().email({ message: "Invalid email address" }),
   phone: z.string().optional(),
 });
 
@@ -76,6 +75,9 @@ export default function ProfilePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { user, updateUser, refreshUser } = useAuth();
   const { toast } = useToast();
 
@@ -95,7 +97,6 @@ export default function ProfilePage() {
     defaultValues: {
       firstName: user?.firstName || "",
       lastName: user?.lastName || "",
-      email: user?.email || "",
       phone: "",
     },
   });
@@ -110,6 +111,12 @@ export default function ProfilePage() {
   const { data: classes = [], isLoading: isLoadingClasses } = useQuery({
     queryKey: ["/api/classes"],
     enabled: user?.role === "teacher",
+  });
+
+  // Fetch classes for student
+  const { data: studentClasses = [], isLoading: isLoadingStudentClasses } = useQuery({
+    queryKey: ["/api/classes/student"],
+    enabled: user?.role === "student",
   });
 
   // Update password mutation
@@ -183,11 +190,11 @@ export default function ProfilePage() {
           setMobileMenuOpen={setMobileMenuOpen} 
         />
         
-        <main className="flex-1 ml-0 md:ml-64 bg-gray-50 pt-16 min-h-screen">
+        <main className="flex-1 ml-0 md:ml-64 bg-background dark:bg-background pt-16 min-h-screen">
           <div className="p-4 md:p-6">
             <div className="mb-6">
-              <h1 className="text-2xl font-bold text-gray-900">Profile</h1>
-              <p className="text-gray-600">Manage your account information and settings</p>
+              <h1 className="text-2xl font-bold text-foreground dark:text-primary">Profile</h1>
+              <p className="text-muted-foreground dark:text-sidebar-foreground/70">Manage your account information and settings</p>
             </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -208,11 +215,11 @@ export default function ProfilePage() {
                     </Badge>
                     <div className="w-full space-y-3 mt-2">
                       <div className="flex items-center">
-                        <Mail className="h-4 w-4 mr-2 text-gray-500" />
+                        <Mail className="h-4 w-4 mr-2 text-muted-foreground dark:text-sidebar-foreground/70" />
                         <span className="text-sm">{user?.email}</span>
                       </div>
                       <div className="flex items-center">
-                        <User className="h-4 w-4 mr-2 text-gray-500" />
+                        <User className="h-4 w-4 mr-2 text-muted-foreground dark:text-sidebar-foreground/70" />
                         <span className="text-sm">@{user?.username}</span>
                       </div>
                       <Separator className="my-4" />
@@ -254,19 +261,6 @@ export default function ProfilePage() {
                                       <FormLabel>Last Name</FormLabel>
                                       <FormControl>
                                         <Input {...field} />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                                <FormField
-                                  control={profileForm.control}
-                                  name="email"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Email Address</FormLabel>
-                                      <FormControl>
-                                        <Input {...field} type="email" />
                                       </FormControl>
                                       <FormMessage />
                                     </FormItem>
@@ -324,7 +318,20 @@ export default function ProfilePage() {
                                     <FormItem>
                                       <FormLabel>Current Password</FormLabel>
                                       <FormControl>
-                                        <Input {...field} type="password" />
+                                        <div className="relative">
+                                          <Input {...field} type={showCurrentPassword ? "text" : "password"} className="pr-10" />
+                                          <button
+                                            type="button"
+                                            onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                                          >
+                                            {showCurrentPassword ? (
+                                              <EyeOff className="h-4 w-4" />
+                                            ) : (
+                                              <Eye className="h-4 w-4" />
+                                            )}
+                                          </button>
+                                        </div>
                                       </FormControl>
                                       <FormMessage />
                                     </FormItem>
@@ -337,7 +344,20 @@ export default function ProfilePage() {
                                     <FormItem>
                                       <FormLabel>New Password</FormLabel>
                                       <FormControl>
-                                        <Input {...field} type="password" />
+                                        <div className="relative">
+                                          <Input {...field} type={showNewPassword ? "text" : "password"} className="pr-10" />
+                                          <button
+                                            type="button"
+                                            onClick={() => setShowNewPassword(!showNewPassword)}
+                                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                                          >
+                                            {showNewPassword ? (
+                                              <EyeOff className="h-4 w-4" />
+                                            ) : (
+                                              <Eye className="h-4 w-4" />
+                                            )}
+                                          </button>
+                                        </div>
                                       </FormControl>
                                       <FormDescription>
                                         At least 8 characters
@@ -353,7 +373,20 @@ export default function ProfilePage() {
                                     <FormItem>
                                       <FormLabel>Confirm New Password</FormLabel>
                                       <FormControl>
-                                        <Input {...field} type="password" />
+                                        <div className="relative">
+                                          <Input {...field} type={showConfirmPassword ? "text" : "password"} className="pr-10" />
+                                          <button
+                                            type="button"
+                                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                                          >
+                                            {showConfirmPassword ? (
+                                              <EyeOff className="h-4 w-4" />
+                                            ) : (
+                                              <Eye className="h-4 w-4" />
+                                            )}
+                                          </button>
+                                        </div>
                                       </FormControl>
                                       <FormMessage />
                                     </FormItem>
@@ -523,14 +556,46 @@ export default function ProfilePage() {
                     <CardDescription>Classes you are enrolled in</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    {/* Student classes would go here */}
-                    <div className="text-center py-6">
-                      <Book className="mx-auto h-12 w-12 text-gray-400" />
-                      <h3 className="mt-2 text-sm font-semibold text-gray-900">No classes yet</h3>
-                      <p className="mt-1 text-sm text-gray-500">
-                        You are not enrolled in any classes at the moment.
-                      </p>
-                    </div>
+                    {isLoadingStudentClasses ? (
+                      <div className="space-y-3">
+                        {[...Array(3)].map((_, i) => (
+                          <div key={i} className="space-y-2">
+                            <Skeleton className="h-5 w-[300px]" />
+                            <Skeleton className="h-4 w-[250px]" />
+                            <Skeleton className="h-4 w-full" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (studentClasses && studentClasses.length > 0) ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Subject</TableHead>
+                            <TableHead>Grade Level</TableHead>
+                            <TableHead>Teacher</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {studentClasses.map((cls: any) => (
+                            <TableRow key={cls.id}>
+                              <TableCell className="font-medium">{cls.name}</TableCell>
+                              <TableCell>{cls.subject}</TableCell>
+                              <TableCell>{cls.gradeLevel}</TableCell>
+                              <TableCell>{cls.teacherName || "N/A"}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <div className="text-center py-6">
+                        <Book className="mx-auto h-12 w-12 text-gray-400" />
+                        <h3 className="mt-2 text-sm font-semibold text-gray-900">No classes yet</h3>
+                        <p className="mt-1 text-sm text-gray-500">
+                          You are not enrolled in any classes at the moment.
+                        </p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}

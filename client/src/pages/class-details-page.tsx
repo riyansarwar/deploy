@@ -305,9 +305,17 @@ export default function ClassDetailsPage({ params }: ClassDetailsPageProps) {
                             {quiz.scheduledAt ? new Date(quiz.scheduledAt).toLocaleDateString() : "Not scheduled"}
                           </TableCell>
                           <TableCell>
-                            {quiz.status === "completed" && (
-                              <Button variant="outline" size="sm" onClick={() => setLocation(`/quizzes/${quiz.id}/grade`)}>
-                                Grade
+                            {isTeacher ? (
+                              <>
+                                {quiz.status === "completed" && (
+                                  <Button variant="outline" size="sm" onClick={() => setLocation(`/quizzes/${quiz.id}/grade`)}>
+                                    Grade
+                                  </Button>
+                                )}
+                              </>
+                            ) : (
+                              <Button variant="outline" size="sm" onClick={() => setLocation(`/quizzes/${quiz.id}/results`)}>
+                                View Results
                               </Button>
                             )}
                           </TableCell>

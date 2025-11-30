@@ -50,11 +50,11 @@ export default function DashboardPage() {
         
         <main className="flex-1 ml-0 md:ml-64 pt-16 min-h-screen">
           <div className="p-4 md:p-6">
-            <div className="mb-8 bg-gradient-to-r from-cyan-50 to-blue-50 rounded-xl p-6 border border-cyan-200 shadow-lg">
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-600 to-cyan-500 bg-clip-text text-transparent">
+            <div className="mb-8 bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-card dark:to-card rounded-xl p-6 border border-cyan-200 dark:border-sidebar-border shadow-lg dark:shadow-md dark:shadow-primary/10">
+              <h1 className="text-3xl font-bold text-cyan-600 dark:text-primary">
                 {isTeacher ? "Teacher Dashboard" : "Student Dashboard"}
               </h1>
-              <p className="text-cyan-700 mt-2">
+              <p className="text-cyan-700 dark:text-primary mt-2">
                 Welcome back, {user?.firstName}! Here's an overview of your {isTeacher ? "classes" : "assignments"} and recent activity.
               </p>
             </div>

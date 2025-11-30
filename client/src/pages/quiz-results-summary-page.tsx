@@ -110,7 +110,7 @@ export default function QuizResultsSummaryPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {resultsData?.map((student: StudentResult) => (
+            {[...resultsData || []].sort((a: StudentResult, b: StudentResult) => (b.score ?? -1) - (a.score ?? -1)).map((student: StudentResult) => (
               <div key={student.studentQuizId} className="border rounded-lg overflow-hidden">
                 <div
                   className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 cursor-pointer transition"

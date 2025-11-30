@@ -8,16 +8,33 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { Eye, EyeOff } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 export default function AuthPage() {
   const [, setLocation] = useLocation();
   const { login, register, loading } = useAuth();
   const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState("login");
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  const [showRegisterConfirmPassword, setShowRegisterConfirmPassword] = useState(false);
   
   const [loginForm, setLoginForm] = useState({
-    username: "",
+    email: "",
     password: "",
-    role: "student" // Default to student
+    role: "student"
   });
   
   const [registerForm, setRegisterForm] = useState({
@@ -43,7 +60,7 @@ export default function AuthPage() {
     }
     
     try {
-      await login(loginForm.username, loginForm.password, loginForm.role);
+      await login(loginForm.email, loginForm.password, loginForm.role);
       toast({
         title: "Success",
         description: "Logged in successfully!",
@@ -80,7 +97,7 @@ export default function AuthPage() {
     }
     
     try {
-      await register(
+      const message = await register(
         registerForm.email,
         registerForm.password,
         registerForm.firstName,
@@ -89,16 +106,57 @@ export default function AuthPage() {
         registerForm.username
       );
       toast({
-        title: "Success",
-        description: "Account created successfully!",
+        title: "Registration Submitted",
+        description: message,
       });
-      setLocation("/");
+      setActiveTab("login");
     } catch (error: any) {
       toast({
         title: "Registration Failed",
         description: error.message,
         variant: "destructive",
       });
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!forgotPasswordEmail) {
+      toast({
+        title: "Email Required",
+        description: "Please enter your email address",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setForgotPasswordLoading(true);
+    try {
+      const response = await fetch("/api/forgot-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: forgotPasswordEmail }),
+      });
+
+      const data = await response.json();
+
+      toast({
+        title: "Email Sent",
+        description: data.message,
+      });
+      setForgotPasswordOpen(false);
+      setForgotPasswordEmail("");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to send reset email. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setForgotPasswordLoading(false);
     }
   };
 
@@ -141,7 +199,7 @@ export default function AuthPage() {
 
           {/* Right Side - Auth Form */}
           <div className="w-full md:w-1/2 p-8">
-            <Tabs defaultValue="login" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-6">
                 <TabsTrigger 
                   value="login" 
@@ -160,12 +218,13 @@ export default function AuthPage() {
               <TabsContent value="login">
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="username">Username</Label>
+                    <Label htmlFor="login-email">Email</Label>
                     <Input
-                      id="username"
-                      placeholder="your.username"
-                      value={loginForm.username}
-                      onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
+                      id="login-email"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={loginForm.email}
+                      onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
                       className="bg-cyan-50 border-cyan-200"
                       required
                     />
@@ -173,15 +232,28 @@ export default function AuthPage() {
                   
                   <div className="space-y-2">
                     <Label htmlFor="password">Password</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={loginForm.password}
-                      onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                      className="bg-cyan-50 border-cyan-200"
-                      required
-                    />
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showLoginPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        value={loginForm.password}
+                        onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                        className="bg-cyan-50 border-cyan-200 pr-10"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowLoginPassword(!showLoginPassword)}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                      >
+                        {showLoginPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
 
 
@@ -212,6 +284,49 @@ export default function AuthPage() {
                   >
                     {loading ? "Logging in..." : "Log In"}
                   </Button>
+
+                  <Dialog open={forgotPasswordOpen} onOpenChange={setForgotPasswordOpen}>
+                    <DialogTrigger asChild>
+                      <Button 
+                        type="button"
+                        variant="link" 
+                        className="w-full text-cyan-600 hover:text-cyan-700"
+                      >
+                        Forgot Password?
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Reset Your Password</DialogTitle>
+                        <DialogDescription>
+                          Enter your email address and we'll send you a link to reset your password.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <form onSubmit={handleForgotPassword} className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="forgot-email">Email Address</Label>
+                          <Input
+                            id="forgot-email"
+                            type="email"
+                            placeholder="you@example.com"
+                            value={forgotPasswordEmail}
+                            onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                            className="bg-cyan-50 border-cyan-200"
+                            required
+                          />
+                        </div>
+                        <DialogFooter>
+                          <Button
+                            type="submit"
+                            disabled={forgotPasswordLoading}
+                            className="bg-cyan-500 hover:bg-cyan-600 text-white"
+                          >
+                            {forgotPasswordLoading ? "Sending..." : "Send Reset Link"}
+                          </Button>
+                        </DialogFooter>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
                 </form>
               </TabsContent>
               
@@ -270,28 +385,54 @@ export default function AuthPage() {
                   
                   <div className="space-y-2">
                     <Label htmlFor="password-reg">Password</Label>
-                    <Input
-                      id="password-reg"
-                      type="password"
-                      placeholder="••••••••"
-                      value={registerForm.password}
-                      onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
-                      className="bg-cyan-50 border-cyan-200"
-                      required
-                    />
+                    <div className="relative">
+                      <Input
+                        id="password-reg"
+                        type={showRegisterPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        value={registerForm.password}
+                        onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
+                        className="bg-cyan-50 border-cyan-200 pr-10"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                      >
+                        {showRegisterPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                   
                   <div className="space-y-2">
                     <Label htmlFor="confirmPassword">Confirm Password</Label>
-                    <Input
-                      id="confirmPassword"
-                      type="password"
-                      placeholder="••••••••"
-                      value={registerForm.confirmPassword}
-                      onChange={(e) => setRegisterForm({ ...registerForm, confirmPassword: e.target.value })}
-                      className="bg-cyan-50 border-cyan-200"
-                      required
-                    />
+                    <div className="relative">
+                      <Input
+                        id="confirmPassword"
+                        type={showRegisterConfirmPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        value={registerForm.confirmPassword}
+                        onChange={(e) => setRegisterForm({ ...registerForm, confirmPassword: e.target.value })}
+                        className="bg-cyan-50 border-cyan-200 pr-10"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowRegisterConfirmPassword(!showRegisterConfirmPassword)}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                      >
+                        {showRegisterConfirmPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="space-y-3">
@@ -312,6 +453,8 @@ export default function AuthPage() {
                       </div>
                     </RadioGroup>
                   </div>
+                  
+                  <p className="text-sm text-gray-500">A verification link will be sent to your email.</p>
                   
                   <Button 
                     type="submit" 

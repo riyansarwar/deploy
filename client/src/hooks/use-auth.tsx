@@ -8,12 +8,13 @@ interface User {
   firstName?: string;
   lastName?: string;
   role: "teacher" | "student";
+  emailVerified: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (username: string, password: string, role?: string, rememberMe?: boolean) => Promise<void>;
-  register: (email: string, password: string, firstName: string, lastName: string, role: string, username: string) => Promise<void>;
+  login: (email: string, password: string, role?: string, rememberMe?: boolean) => Promise<void>;
+  register: (email: string, password: string, firstName: string, lastName: string, role: string, username: string) => Promise<string>;
   logout: () => Promise<void>;
   loading: boolean;
   updateUser: (patch: Partial<User>) => void;
@@ -58,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = async (username: string, password: string, role?: string, rememberMe: boolean = false) => {
+  const login = async (email: string, password: string, role?: string, rememberMe: boolean = false) => {
     setLoading(true);
     try {
       const response = await fetch("/api/login", {
@@ -66,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ username, password, role }),
+        body: JSON.stringify({ email, password, role }),
       });
 
       if (!response.ok) {
@@ -113,17 +114,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }),
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Registration failed");
-      }
+      const data = await response.json();
 
-      const { token, user: userData } = await response.json();
-      localStorage.setItem("auth_token", token);
-      setUser(userData);
+      if (!response.ok) {
+        throw new Error(data.message || "Registration failed");
+      }
       
-      // Clear any cached queries
       queryClient.clear();
+      return data.message || "Registration successful. Please verify your email.";
     } catch (error) {
       console.error("Registration error:", error);
       throw error;

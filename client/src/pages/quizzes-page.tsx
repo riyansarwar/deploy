@@ -453,12 +453,12 @@ export default function QuizzesPage() {
           setMobileMenuOpen={setMobileMenuOpen} 
         />
         
-        <main className="flex-1 ml-0 md:ml-64 bg-gray-50 pt-16 min-h-screen">
+        <main className="flex-1 ml-0 md:ml-64 bg-background dark:bg-background pt-16 min-h-screen text-foreground">
           <div className="p-4 md:p-6">
             <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Quiz Management</h1>
-                <p className="text-gray-600">
+                <h1 className="text-2xl font-bold text-foreground dark:text-primary">Quiz Management</h1>
+                <p className="text-muted-foreground dark:text-sidebar-foreground/70">
                   {isTeacher 
                     ? "Create, schedule and analyze quizzes for your classes" 
                     : "View and take your assigned quizzes"}
@@ -467,6 +467,7 @@ export default function QuizzesPage() {
               
               {isTeacher && (
                 <Button 
+                  variant="default"
                   className="mt-4 md:mt-0"
                   onClick={() => {
                     form.reset();
@@ -483,57 +484,57 @@ export default function QuizzesPage() {
             {/* Quiz Status Cards for teachers */}
             {isTeacher && (
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <Card className="p-5">
+                <Card className="p-5 bg-card dark:bg-card border border-border/70 dark:border-sidebar-border shadow-sm">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-gray-500 text-sm">Draft</p>
-                      <h3 className="text-2xl font-bold">
+                      <p className="text-sm text-muted-foreground dark:text-sidebar-foreground/70">Draft</p>
+                      <h3 className="text-2xl font-bold text-foreground dark:text-primary">
                         {quizzes?.filter(q => q.status === "draft").length || 0}
                       </h3>
                     </div>
-                    <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-600">
+                    <div className="w-12 h-12 rounded-full bg-muted/60 dark:bg-sidebar-background/40 flex items-center justify-center text-primary">
                       <FileText className="h-6 w-6" />
                     </div>
                   </div>
                 </Card>
                 
-                <Card className="p-5">
+                <Card className="p-5 bg-card dark:bg-card border border-border/70 dark:border-sidebar-border shadow-sm">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-gray-500 text-sm">Scheduled</p>
-                      <h3 className="text-2xl font-bold">
+                      <p className="text-sm text-muted-foreground dark:text-sidebar-foreground/70">Scheduled</p>
+                      <h3 className="text-2xl font-bold text-foreground dark:text-primary">
                         {quizzes?.filter(q => q.status === "scheduled").length || 0}
                       </h3>
                     </div>
-                    <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                    <div className="w-12 h-12 rounded-full bg-sky-500/10 dark:bg-sky-500/20 text-sky-600 dark:text-sky-300 flex items-center justify-center">
                       <CalendarIcon className="h-6 w-6" />
                     </div>
                   </div>
                 </Card>
                 
-                <Card className="p-5">
+                <Card className="p-5 bg-card dark:bg-card border border-border/70 dark:border-sidebar-border shadow-sm">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-gray-500 text-sm">Active</p>
-                      <h3 className="text-2xl font-bold">
+                      <p className="text-sm text-muted-foreground dark:text-sidebar-foreground/70">Active</p>
+                      <h3 className="text-2xl font-bold text-foreground dark:text-primary">
                         {quizzes?.filter(q => q.status === "active").length || 0}
                       </h3>
                     </div>
-                    <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-green-600">
+                    <div className="w-12 h-12 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 flex items-center justify-center">
                       <CheckCircle className="h-6 w-6" />
                     </div>
                   </div>
                 </Card>
                 
-                <Card className="p-5">
+                <Card className="p-5 bg-card dark:bg-card border border-border/70 dark:border-sidebar-border shadow-sm">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-gray-500 text-sm">Completed</p>
-                      <h3 className="text-2xl font-bold">
+                      <p className="text-sm text-muted-foreground dark:text-sidebar-foreground/70">Completed</p>
+                      <h3 className="text-2xl font-bold text-foreground dark:text-primary">
                         {quizzes?.filter(q => q.status === "completed").length || 0}
                       </h3>
                     </div>
-                    <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
+                    <div className="w-12 h-12 rounded-full bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-300 flex items-center justify-center">
                       <BarChart className="h-6 w-6" />
                     </div>
                   </div>
@@ -1064,12 +1065,12 @@ export default function QuizzesPage() {
                     </div>
                   </div>
                   
-                  <div className="border rounded-md">
+                  <div className="border border-border/70 dark:border-sidebar-border rounded-md">
                     <ScrollArea className="h-60">
                       <div className="p-4 space-y-4">
                         {filteredQuestions && filteredQuestions.length > 0 ? (
                           filteredQuestions.map((question) => (
-                            <div key={question.id} className="flex items-start space-x-3 p-3 border rounded hover:bg-gray-50">
+                            <div key={question.id} className="flex items-start space-x-3 p-3 border border-border/60 dark:border-sidebar-border rounded hover:bg-muted/40 dark:hover:bg-sidebar-background/40">
                               <Checkbox
                                 id={`edit-question-${question.id}`}
                                 checked={selectedQuestions.includes(question.id)}
@@ -1081,7 +1082,7 @@ export default function QuizzesPage() {
                               <div className="flex-1">
                                 <Label 
                                   htmlFor={`edit-question-${question.id}`}
-                                  className="font-medium text-sm cursor-pointer"
+                                  className="font-medium text-sm cursor-pointer text-foreground dark:text-primary"
                                 >
                                   {question.content}
                                 </Label>
@@ -1100,7 +1101,7 @@ export default function QuizzesPage() {
                             </div>
                           ))
                         ) : (
-                          <p className="text-center text-gray-500 py-8">
+                          <p className="text-center text-muted-foreground dark:text-sidebar-foreground/70 py-8">
                             No questions available. Create questions first.
                           </p>
                         )}
@@ -1109,7 +1110,7 @@ export default function QuizzesPage() {
                   </div>
                   
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">
+                    <span className="text-sm text-muted-foreground dark:text-sidebar-foreground/70">
                       {selectedQuestions.length} question(s) selected
                     </span>
                     <div className="space-x-2">
@@ -1133,11 +1134,11 @@ export default function QuizzesPage() {
             </Dialog>
             
             {/* Filter and Search */}
-            <Card className="mb-6">
+            <Card className="mb-6 bg-card dark:bg-card border border-border/70 dark:border-sidebar-border shadow-sm">
               <CardContent className="p-4">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
-                    <Label className="block text-sm font-medium text-gray-700 mb-1">Class</Label>
+                    <Label className="block text-sm font-medium text-foreground dark:text-primary mb-1">Class</Label>
                     <Select onValueChange={(value) => handleFilterChange('classId', value)} value={filters.classId}>
                       <SelectTrigger>
                         <SelectValue placeholder="All Classes" />
@@ -1154,7 +1155,7 @@ export default function QuizzesPage() {
                   </div>
                   
                   <div>
-                    <Label className="block text-sm font-medium text-gray-700 mb-1">Status</Label>
+                    <Label className="block text-sm font-medium text-foreground dark:text-primary mb-1">Status</Label>
                     <Select onValueChange={(value) => handleFilterChange('status', value)} value={filters.status}>
                       <SelectTrigger>
                         <SelectValue placeholder="All Status" />
@@ -1176,7 +1177,7 @@ export default function QuizzesPage() {
                   </div>
                   
                   <div>
-                    <Label className="block text-sm font-medium text-gray-700 mb-1">Date Range</Label>
+                    <Label className="block text-sm font-medium text-foreground dark:text-primary mb-1">Date Range</Label>
                     <Select onValueChange={(value) => handleFilterChange('dateRange', value)} value={filters.dateRange}>
                       <SelectTrigger>
                         <SelectValue placeholder="All Time" />
@@ -1191,7 +1192,7 @@ export default function QuizzesPage() {
                   </div>
                   
                   <div>
-                    <Label className="block text-sm font-medium text-gray-700 mb-1">Search</Label>
+                    <Label className="block text-sm font-medium text-foreground dark:text-primary mb-1">Search</Label>
                     <div className="relative">
                       <Input
                         placeholder="Search quizzes..."
@@ -1200,7 +1201,7 @@ export default function QuizzesPage() {
                         className="pl-10"
                       />
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <SearchIcon className="h-4 w-4 text-gray-400" />
+                        <SearchIcon className="h-4 w-4 text-muted-foreground" />
                       </div>
                     </div>
                   </div>
@@ -1209,7 +1210,7 @@ export default function QuizzesPage() {
             </Card>
             
             {/* Quiz List */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="bg-card dark:bg-card border border-border/70 dark:border-sidebar-border rounded-lg shadow">
               {isLoading ? (
                 <div className="p-6 space-y-4">
                   {[1, 2, 3, 4, 5].map((i) => (
@@ -1275,7 +1276,7 @@ export default function QuizzesPage() {
                                       <Button 
                                         variant="ghost" 
                                         onClick={() => handleDeleteQuiz(quiz.id)}
-                                        className="text-red-600 hover:text-red-700"
+                                        className="text-destructive hover:text-destructive/80 dark:text-red-300 dark:hover:text-red-200"
                                       >
                                         <XCircle className="h-4 w-4 mr-1" />
                                         Delete
@@ -1287,7 +1288,7 @@ export default function QuizzesPage() {
                                     <>
                                       <Button 
                                         variant="ghost" 
-                                        className="text-red-600"
+                                        className="text-destructive dark:text-red-300"
                                         onClick={() => handleCancelQuiz(quiz.id)}
                                       >
                                         <XCircle className="h-4 w-4 mr-1" />
@@ -1304,7 +1305,7 @@ export default function QuizzesPage() {
                                     <>
                                       <Button 
                                         variant="ghost" 
-                                        className="text-red-600"
+                                        className="text-destructive dark:text-red-300"
                                         onClick={() => handleEndQuiz(quiz.id)}
                                       >
                                         End Now
@@ -1322,7 +1323,7 @@ export default function QuizzesPage() {
                                         <Button
                                           variant="ghost"
                                           onClick={() => setLocation(`/quizzes/${quiz.id}/results-summary`)}
-                                          className="text-green-600 hover:text-green-700"
+                                          className="text-emerald-600 hover:text-emerald-500 dark:text-emerald-300 dark:hover:text-emerald-200"
                                         >
                                           <CheckCircle className="h-4 w-4 mr-1" />
                                           View Results
@@ -1332,7 +1333,7 @@ export default function QuizzesPage() {
                                           <Button
                                             variant="ghost"
                                             onClick={() => setLocation(`/quizzes/${quiz.id}/grade`)}
-                                            className="text-blue-600 hover:text-blue-700"
+                                            className="text-sky-600 hover:text-sky-500 dark:text-sky-300 dark:hover:text-sky-200"
                                           >
                                             <FileText className="h-4 w-4 mr-1" />
                                             Grade
@@ -1396,10 +1397,10 @@ export default function QuizzesPage() {
                   </Table>
                   
                   {totalPages > 1 && (
-                    <div className="px-6 py-3 flex items-center justify-between border-t border-gray-200">
+                    <div className="px-6 py-3 flex items-center justify-between border-t border-border/70 dark:border-sidebar-border">
                       <div className="flex-1 flex items-center justify-between">
                         <div>
-                          <p className="text-sm text-gray-700">
+                          <p className="text-sm text-muted-foreground dark:text-sidebar-foreground/70">
                             Showing <span className="font-medium">{startIndex + 1}</span> to{" "}
                             <span className="font-medium">{Math.min(endIndex, totalQuizzes)}</span> of{" "}
                             <span className="font-medium">{totalQuizzes}</span> quizzes

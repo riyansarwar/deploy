@@ -35,7 +35,7 @@ export default function UpcomingQuizzes() {
   if (isLoading) {
     return (
       <Card>
-        <CardHeader className="px-5 py-4 border-b border-gray-200">
+        <CardHeader className="px-5 py-4 border-b border-border dark:border-sidebar-border">
           <CardTitle className="text-lg font-semibold">Upcoming Quizzes</CardTitle>
         </CardHeader>
         <CardContent className="p-5">
@@ -64,12 +64,12 @@ export default function UpcomingQuizzes() {
 
   return (
     <Card>
-      <CardHeader className="px-5 py-4 border-b border-gray-200 flex justify-between items-center">
+      <CardHeader className="px-5 py-4 border-b border-border dark:border-sidebar-border flex justify-between items-center">
         <CardTitle className="text-lg font-semibold">Upcoming Quizzes</CardTitle>
         <Button 
           variant="link" 
           size="sm" 
-          className="text-primary-600"
+          className="text-primary"
           onClick={() => setLocation("/quizzes")}
         >
           View All
@@ -77,7 +77,7 @@ export default function UpcomingQuizzes() {
       </CardHeader>
       <CardContent className="p-5">
         {quizzes && quizzes.length > 0 ? (
-          <ul className="divide-y divide-gray-200">
+          <ul className="divide-y divide-border dark:divide-sidebar-border">
             {quizzes.map((quiz) => {
               const quizDate = new Date(quiz.scheduledAt);
               const isToday = new Date().toDateString() === quizDate.toDateString();
@@ -107,7 +107,7 @@ export default function UpcomingQuizzes() {
               return (
                 <li 
                   key={quiz.id} 
-                  className="py-3 flex justify-between items-center cursor-pointer hover:bg-gray-50 rounded-md px-2 transition-colors"
+                  className="py-3 flex justify-between items-center cursor-pointer hover:bg-accent dark:hover:bg-sidebar-accent rounded-md px-2 transition-colors"
                   onClick={() => setLocation(`/quizzes/${quiz.id}`)}
                 >
                   <div className="flex items-center">
@@ -116,20 +116,20 @@ export default function UpcomingQuizzes() {
                     </div>
                     <div className="ml-3">
                       <p className="font-medium">{quiz.title}</p>
-                      <p className="text-sm text-gray-500">{quiz.gradeLevel} • {quiz.duration} mins</p>
+                      <p className="text-sm text-muted-foreground dark:text-sidebar-foreground/70">{quiz.gradeLevel} • {quiz.duration} mins</p>
                     </div>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-medium">{dateText}</p>
-                    <p className="text-xs text-gray-500">{timeText}</p>
+                    <p className="text-xs text-muted-foreground dark:text-sidebar-foreground/70">{timeText}</p>
                   </div>
                 </li>
               );
             })}
           </ul>
         ) : (
-          <div className="text-center py-6">
-            <p className="text-gray-500 mb-4">No upcoming quizzes found</p>
+          <div className="text-center py-8 rounded-xl border border-border/70 dark:border-sidebar-border/60 bg-muted/60 dark:bg-muted/20">
+            <p className="text-muted-foreground dark:text-sidebar-foreground/70">No upcoming quizzes found</p>
           </div>
         )}
         {isTeacher && (

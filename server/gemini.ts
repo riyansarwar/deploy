@@ -73,7 +73,7 @@ class GeminiClient {
 
   constructor({ apiKey, model, timeoutMs = 30000 }: { apiKey?: string; model?: string; timeoutMs?: number }) {
     if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is not set");
+      throw new Error("PERCEIVE_AI_KEY is not set");
     }
 
     this.apiKey = apiKey;
@@ -245,7 +245,7 @@ let singleton: GeminiClient | null = null;
 export function getGeminiClient(): GeminiClient {
   if (!singleton) {
     singleton = new GeminiClient({
-      apiKey: process.env.GEMINI_API_KEY,
+      apiKey: process.env.PERCEIVE_AI_KEY,
       model: process.env.GEMINI_MODEL,
       timeoutMs: process.env.GEMINI_TIMEOUT_MS ? Number(process.env.GEMINI_TIMEOUT_MS) : undefined,
     });

@@ -42,6 +42,15 @@ export class Storage {
     }
   }
 
+  async markEmailVerifiedByEmail(email: string): Promise<User | undefined> {
+    const [updated] = await db
+      .update(users)
+      .set({ emailVerified: true })
+      .where(eq(users.email, email))
+      .returning();
+    return updated;
+  }
+
 
 
   async getUserById(id: number): Promise<User | undefined> {
@@ -102,13 +111,7 @@ export class Storage {
     return updated;
   }
 
-  // Update password hash
-  async updateUserPassword(id: number, passwordHash: string): Promise<void> {
-    await db
-      .update(users)
-      .set({ password: passwordHash })
-      .where(eq(users.id, id));
-  }
+
 
   // Questions
   async createQuestion(questionData: InsertQuestion): Promise<Question> {
@@ -180,7 +183,11 @@ export class Storage {
         query = query.where(and(...conditions));
       }
 
-      const result = await query.orderBy(desc(questions.createdAt));
+      const result = await query.orderBy(
+        sql`COALESCE(${questions.chapter}, ${questions.subject})`,
+        questions.gradeLevel,
+        questions.id
+      );
       return result;
     } catch (error) {
       console.error("Error searching questions:", error);
@@ -259,16 +266,21 @@ export class Storage {
   }
 
   // Student-teacher relationships
-  async getClassesByStudent(studentId: number): Promise<Class[]> {
+  async getClassesByStudent(studentId: number): Promise<any[]> {
     const result = await db
       .select({
-        class: classes
+        class: classes,
+        teacherName: sql<string>`CONCAT(${users.firstName}, ' ', ${users.lastName})`
       })
       .from(classStudents)
       .innerJoin(classes, eq(classStudents.classId, classes.id))
+      .innerJoin(users, eq(classes.teacherId, users.id))
       .where(eq(classStudents.studentId, studentId));
     
-    return result.map(r => r.class);
+    return result.map(r => ({
+      ...r.class,
+      teacherName: r.teacherName
+    }));
   }
 
   async getClass(id: number): Promise<Class | undefined> {
@@ -823,7 +835,8 @@ export async function initializeSampleData() {
         password: "password",
         firstName: "John",
         lastName: "Smith",
-        role: "teacher"
+        role: "teacher",
+        emailVerified: true
       },
       {
         username: "student1",
@@ -831,7 +844,8 @@ export async function initializeSampleData() {
         password: "password", 
         firstName: "Alice",
         lastName: "Johnson",
-        role: "student"
+        role: "student",
+        emailVerified: true
       },
       {
         username: "student2", 
@@ -839,7 +853,8 @@ export async function initializeSampleData() {
         password: "password",
         firstName: "Bob",
         lastName: "Wilson", 
-        role: "student"
+        role: "student",
+        emailVerified: true
       }
     ];
 

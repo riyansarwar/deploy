@@ -9,14 +9,14 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default:
-          "border-transparent bg-gradient-to-r from-primary to-primary/90 text-primary-foreground hover:from-primary/90 hover:to-primary/80",
+          "border-transparent bg-gradient-to-r from-primary to-primary/90 text-primary-foreground hover:from-primary/90 hover:to-primary/80 dark:text-foreground dark:bg-primary dark:hover:bg-primary/90",
         secondary:
-          "border-transparent bg-gradient-to-r from-secondary to-secondary/90 text-secondary-foreground hover:from-secondary/90 hover:to-secondary/80",
+          "border-transparent bg-gradient-to-r from-secondary to-secondary/90 text-secondary-foreground hover:from-secondary/90 hover:to-secondary/80 dark:bg-secondary dark:text-foreground dark:hover:bg-secondary/90",
         destructive:
-          "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
-        outline: "text-primary border-primary/30 hover:bg-primary/10",
-        cyan: "border-transparent bg-gradient-to-r from-cyan-500 to-cyan-600 text-white hover:from-cyan-600 hover:to-cyan-700",
-        "cyan-outline": "text-cyan-600 border-cyan-300 hover:bg-cyan-50",
+          "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80 dark:bg-destructive dark:text-foreground dark:hover:bg-destructive/80",
+        outline: "text-primary border-primary/30 hover:bg-primary/10 dark:text-primary dark:border-primary/50 dark:hover:bg-primary/20",
+        cyan: "border-transparent bg-gradient-to-r from-primary to-primary/90 text-primary-foreground hover:from-primary/90 hover:to-primary/80 dark:text-foreground dark:bg-primary dark:hover:bg-primary/90",
+        "cyan-outline": "text-primary border-primary/30 hover:bg-primary/10 dark:text-primary dark:border-primary/50 dark:hover:bg-primary/20",
       },
     },
     defaultVariants: {
