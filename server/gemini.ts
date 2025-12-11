@@ -1,6 +1,6 @@
 import axios, { AxiosError } from "axios";
 
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models";
+const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 const DEFAULT_SUBJECT = "Object-Oriented Programming with C++";
 
 const GEMINI_BASE_PROMPT = `You are an AI grader for C++ programming assessments. Grade each question individually fairly and educationally.
@@ -26,8 +26,7 @@ Respond with deterministic JSON that exactly matches this shape:
       "letterGrade": "<A|B|C|D|F>",
       "feedback": "<brief constructive feedback>"
     }
-  ],
-  "model": "gemini-2.0-flash-001"
+  ]
 }
 
 Grade each question individually. The questionGrades array must contain one entry for each question in the submission. Do not include scores or additional fields beyond what's specified.`;

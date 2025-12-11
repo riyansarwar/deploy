@@ -1814,34 +1814,6 @@ app.post("/api/ai/save-questions", ensureTeacher, async (req, res) => {
         await storage.addQuestionToPracticeQuiz(practiceQuiz.id, question.id);
       }
 
-      // Notify students in the same classes about new practice quiz (optional)
-      const userClasses = await storage.getClassesByStudent(user.id);
-
-      if (userClasses.length > 0) {
-        // For each class, get the students and send notifications to them
-        const processedStudentIds = new Set<number>();
-        processedStudentIds.add(user.id); // Don't notify the creator
-
-        for (const classItem of userClasses) {
-          const classStudents = await storage.getClassStudents(classItem.id);
-
-          for (const student of classStudents) {
-            if (!processedStudentIds.has(student.id)) {
-              processedStudentIds.add(student.id);
-
-              // Create notification for the student
-              await storage.createNotification({
-                userId: student.id,
-                title: "New Practice Quiz Available",
-                message: `A new practice quiz on ${subject} is available for practice.`,
-                type: "practice_quiz_available",
-                relatedId: practiceQuiz.id
-              });
-            }
-          }
-        }
-      }
-
       // Get practice quiz questions with full details
       const questionsWithDetails = await storage.getPracticeQuizQuestions(practiceQuiz.id);
 
