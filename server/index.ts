@@ -9,6 +9,14 @@ import { spawn, exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import express, { Request, Response } from 'express';
+
+const app = express();
+
+// Use a simple GET route for the pinger
+app.get('/ping', (_req: Request, res: Response) => {
+  res.status(200).send('Server is awake');
+});
 
 console.log('[startup] Creating express app');
 const app = express();
