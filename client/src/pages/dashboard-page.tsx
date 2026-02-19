@@ -37,6 +37,8 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2930429229796840"
+     crossorigin="anonymous"></script>
       <Header 
         mobileMenuOpen={mobileMenuOpen} 
         setMobileMenuOpen={setMobileMenuOpen} 
